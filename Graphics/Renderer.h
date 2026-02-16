@@ -1,0 +1,278 @@
+#pragma once
+#include "../Core/Math/Matrix4.h"
+#include "GPUAnimationInstancing.h"
+#include "MorphingSystem.h"
+#include "PBRSkinShader.h"
+#include "UI/UISystem.h"
+#include "UberMesh.h"
+#include "VulkanBackend.h"
+#include <array>
+#include <cstdint>
+#include <iostream>
+#include <string>
+#include <vector>
+
+
+namespace Mesozoic {
+namespace Graphics {
+
+class Window;
+class TerrainSystem;
+// class UISystem; // Included above
+
+// =========================================================================
+// Render Object: what the renderer sees for each entity
+// =========================================================================
+struct RenderObject {
+  uint32_t entityId;
+  uint32_t meshIndex;                   // Index into MeshRegistry
+  uint32_t materialIndex;               // Index into MaterialRegistry
+  uint32_t animInstanceIndex;           // Index into GPUAnimationSystem
+  std::array<float, 16> worldTransform; // 4x4 model matrix
+  std::vector<float> morphWeights;      // DNA-driven morph weights
+  std::array<float, 4> color = {1, 1, 1, 1};
+  bool visible = true;
+  float distanceToCamera = 0.0f; // For LOD and sorting
+};
+
+// =========================================================================
+// Camera
+// =========================================================================
+struct Camera {
+  std::array<float, 3> position = {0, 50, -100};
+  std::array<float, 3> target = {0, 0, 0};
+  std::array<float, 3> up = {0, 1, 0};
+  float fov = 60.0f; // degrees
+  float nearPlane = 0.1f;
+  float farPlane = 5000.0f;
+  float aspectRatio = 16.0f / 9.0f;
+
+  // View-Projection matrix (would be computed with GLM or custom math)
+  std::array<float, 16> viewMatrix;
+  std::array<float, 16> projMatrix;
+};
+
+// =========================================================================
+// Scene-wide uniform data (uploaded to GPU each frame)
+// =========================================================================
+struct SceneUniforms {
+  std::array<float, 16> viewProjection;
+  std::array<float, 3> cameraPosition;
+  float time;
+  std::array<float, 3> sunDirection;
+  float sunIntensity;
+  std::array<float, 3> sunColor;
+  float ambientIntensity;
+  std::array<float, 3> windDirection; // For smell grid advection + foliage
+  float windStrength;
+};
+
+// =========================================================================
+// LOD (Level of Detail) system
+// =========================================================================
+struct LODLevel {
+  float maxDistance;    // Switch to this LOD below this distance
+  uint32_t meshIndex;   // Different mesh resolution
+  bool useMorphTargets; // Disable morphing at far LODs
+};
+
+struct LODConfig {
+  std::vector<LODLevel> levels; // Sorted near to far
+
+  uint32_t SelectLOD(float distance) const {
+    for (size_t i = 0; i < levels.size(); ++i) {
+      if (distance < levels[i].maxDistance) {
+        return static_cast<uint32_t>(i);
+      }
+    }
+    return static_cast<uint32_t>(levels.size() - 1); // Furthest LOD
+  }
+};
+
+// =========================================================================
+// Main Renderer: orchestrates the entire frame
+// =========================================================================
+class Renderer {
+public:
+  VulkanBackend backend;
+  Window *window;
+  Camera camera;
+  SceneUniforms sceneData;
+
+  // Registries
+  std::vector<UberMesh> meshRegistry;
+  std::vector<GPUMesh> gpuMeshes;
+  SkinShaderSystem skinSystem;
+  GPUAnimationSystem animSystem;
+
+  // External Systems
+  TerrainSystem *terrainSystem = nullptr;
+  UISystem *uiSystem = nullptr;
+
+  // Render queue
+  std::vector<RenderObject> renderQueue;
+
+  // LOD configuration per species
+  std::vector<LODConfig> lodConfigs;
+
+  // Stats
+  uint32_t drawCallsThisFrame = 0;
+  uint32_t trianglesThisFrame = 0;
+  uint32_t instancesThisFrame = 0;
+
+  bool Initialize(Window &window) {
+    if (!backend.Initialize(window)) {
+      return false;
+    }
+
+    // Setup default LOD config for dinosaurs
+    LODConfig defaultLOD;
+    defaultLOD.levels = {
+        {50.0f, 0, true},   // LOD0: Full detail + morphing
+        {150.0f, 1, true},  // LOD1: Medium detail + morphing
+        {500.0f, 2, false}, // LOD2: Low detail, no morphing
+        {2000.0f, 3, false} // LOD3: Billboard/impostor
+    };
+    lodConfigs.push_back(defaultLOD);
+
+    std::cout << "[Renderer] Initialized with " << defaultLOD.levels.size()
+              << " LOD levels" << std::endl;
+    return true;
+  }
+
+  uint32_t RegisterMesh(const UberMesh &mesh) {
+    if (!backend.initialized)
+      return 0xFFFFFFFF;
+    GPUMesh gpuMesh = backend.UploadMesh(mesh.baseVertices, mesh.indices);
+    gpuMeshes.push_back(gpuMesh);
+    return (uint32_t)gpuMeshes.size() - 1;
+  }
+
+  void RenderFrame(float deltaTime) {
+    drawCallsThisFrame = 0;
+    trianglesThisFrame = 0;
+    instancesThisFrame = 0;
+
+    // Update scene uniforms
+    sceneData.time += deltaTime;
+
+    // 1. Acquire swapchain image
+    uint32_t imageIndex = 0;
+    if (!backend.BeginFrame(imageIndex))
+      return;
+
+    // Single pass for now (since we currently have one simplified RenderPass)
+    backend.BeginRenderPass(RenderPassType::GBuffer, imageIndex);
+
+    RenderShadows();
+    RenderGBuffer();
+    RenderLighting();
+    RenderSSS();
+    RenderPostProcess();
+    RenderUI(imageIndex);
+
+    backend.EndRenderPass();
+
+    // 8. Present
+    backend.EndFrame(imageIndex);
+  }
+
+  void SubmitEntity(const RenderObject &obj) { renderQueue.push_back(obj); }
+
+  void PrintStats() const {
+    std::cout << "[Frame Stats] Draw Calls: " << drawCallsThisFrame
+              << " | Triangles: " << trianglesThisFrame
+              << " | Instances: " << instancesThisFrame << std::endl;
+  }
+
+  void Cleanup() {
+    backend.WaitIdle();
+    for (auto &mesh : gpuMeshes) {
+      backend.DestroyMesh(mesh);
+    }
+    gpuMeshes.clear();
+    backend.Cleanup();
+  }
+
+private:
+  void RenderShadows() { drawCallsThisFrame++; }
+
+  void RenderGBuffer() {
+    backend.BindPipeline(backend.graphicsPipeline);
+    backend.BindTerrainTextures();
+
+    for (const auto &obj : renderQueue) {
+      if (!obj.visible)
+        continue;
+
+      if (obj.meshIndex >= gpuMeshes.size())
+        continue;
+
+      // Compute MVP
+      Mesozoic::Math::Matrix4 view, proj;
+      view.m = camera.viewMatrix;
+      proj.m = camera.projMatrix;
+      Mesozoic::Math::Matrix4 vp = proj * view;
+
+      Mesozoic::Math::Matrix4 model;
+      model.m = obj.worldTransform;
+      Mesozoic::Math::Matrix4 mvp = vp * model;
+
+      // Push Constants (Model Matrix + Color + Time + CamPos + ModelPos)
+      struct PushData {
+        Mesozoic::Math::Matrix4 mvp;
+        std::array<float, 4> color;
+        float time;
+        float camX, camY, camZ;
+        float modX, modY, modZ;
+        float padding;
+      } push;
+      push.mvp = mvp;
+      push.color = obj.color;
+      push.time = sceneData.time;
+      push.camX = camera.position[0];
+      push.camY = camera.position[1];
+      push.camZ = camera.position[2];
+      push.modX = obj.worldTransform[12];
+      push.modY = obj.worldTransform[13];
+      push.modZ = obj.worldTransform[14];
+
+      backend.PushConstants(backend.pipelineLayout,
+                            VK_SHADER_STAGE_VERTEX_BIT |
+                                VK_SHADER_STAGE_FRAGMENT_BIT,
+                            0, sizeof(PushData), &push);
+
+      // Special check for grass instancing (flagged by alpha 0.5)
+      if (abs(obj.color[3] - 0.5f) < 0.01f) {
+        backend.DrawMeshInstanced(gpuMeshes[obj.meshIndex], 800000);
+        instancesThisFrame += 800000;
+      } else {
+        backend.DrawMesh(gpuMeshes[obj.meshIndex]);
+        instancesThisFrame++;
+      }
+
+      drawCallsThisFrame++;
+    }
+  }
+
+  void RenderLighting() { drawCallsThisFrame++; }
+
+  void RenderSSS() { drawCallsThisFrame++; }
+
+  void RenderPostProcess() {
+    drawCallsThisFrame += 4; // Multiple passes
+  }
+
+  void RenderUI(uint32_t imageIndex) {
+    if (uiSystem) {
+      VkCommandBuffer cmd = backend.GetCommandBuffer(imageIndex);
+      if (cmd) {
+        uiSystem->EndFrame(cmd);
+      }
+    }
+    drawCallsThisFrame++;
+  }
+};
+
+} // namespace Graphics
+} // namespace Mesozoic

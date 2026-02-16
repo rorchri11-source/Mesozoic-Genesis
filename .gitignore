@@ -1,0 +1,31 @@
+# Build directories
+build/
+bin/
+out/
+
+# CMake
+CMakeCache.txt
+CMakeFiles/
+CMakeSettings.json
+cmake_install.cmake
+install_manifest.txt
+Makefile
+
+# Compiled Shaders
+*.spv
+
+# IDEs
+.vs/
+.vscode/
+*.sln
+*.vcxproj
+*.user
+
+# Temporary files
+*.log
+*.tmp
+*.bak
+
+# OS generated files
+.DS_Store
+Thumbs.db
