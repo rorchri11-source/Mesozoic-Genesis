@@ -201,20 +201,41 @@ public:
   }
 
   void PrintVisitorStats() const {
+    float totalSatisfaction = 0.0f;
+    float totalSpending = 0.0f;
+    int ecstaticCount = 0;
+    int happyCount = 0;
+    int neutralCount = 0;
+    int unhappyCount = 0;
+    int angryCount = 0;
+    int terrifiedCount = 0;
+
+    for (const auto &v : visitors) {
+      totalSatisfaction += v.satisfaction;
+      totalSpending += v.moneySpent;
+      switch (v.mood) {
+      case VisitorMood::Ecstatic: ecstaticCount++; break;
+      case VisitorMood::Happy: happyCount++; break;
+      case VisitorMood::Neutral: neutralCount++; break;
+      case VisitorMood::Unhappy: unhappyCount++; break;
+      case VisitorMood::Angry: angryCount++; break;
+      case VisitorMood::Terrified: terrifiedCount++; break;
+      }
+    }
+
+    float avgSatisfaction =
+        visitors.empty() ? 0.0f : totalSatisfaction / visitors.size();
+
     std::cout << "\n=== VISITOR STATS ===" << std::endl;
     std::cout << "  Active: " << visitors.size() << std::endl;
-    std::cout << "  Avg Satisfaction: "
-              << static_cast<int>(GetAverageSatisfaction() * 100) << "%"
-              << std::endl;
+    std::cout << "  Avg Satisfaction: " << static_cast<int>(avgSatisfaction * 100)
+              << "%" << std::endl;
     std::cout << "  Mood Distribution:" << std::endl;
-    std::cout << "    Ecstatic: " << GetMoodCount(VisitorMood::Ecstatic)
-              << " | Happy: " << GetMoodCount(VisitorMood::Happy)
-              << " | Neutral: " << GetMoodCount(VisitorMood::Neutral)
-              << " | Unhappy: " << GetMoodCount(VisitorMood::Unhappy)
-              << " | Angry: " << GetMoodCount(VisitorMood::Angry)
-              << " | Terrified: " << GetMoodCount(VisitorMood::Terrified)
+    std::cout << "    Ecstatic: " << ecstaticCount << " | Happy: " << happyCount
+              << " | Neutral: " << neutralCount << " | Unhappy: " << unhappyCount
+              << " | Angry: " << angryCount << " | Terrified: " << terrifiedCount
               << std::endl;
-    std::cout << "  Total Spending: $" << static_cast<int>(GetTotalMoneySpent())
+    std::cout << "  Total Spending: $" << static_cast<int>(totalSpending)
               << std::endl;
   }
 

@@ -1,6 +1,6 @@
 #pragma once
-#include "../Graphics/VulkanBackend.h"
-#include "../Graphics/Window.h"
+#include "../VulkanBackend.h"
+#include "../Window.h"
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <string>
@@ -31,7 +31,7 @@ public:
   std::vector<UIElement> drawList;
 
   // Quad mesh (shared)
-  UberMesh quadMesh;
+  GPUMesh quadMesh;
   uint32_t quadMeshId;
 
   void Initialize(VulkanBackend *backend, Window *window);

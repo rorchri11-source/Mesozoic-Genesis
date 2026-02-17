@@ -1,10 +1,10 @@
 #pragma once
 #include "../Core/Math/Vec3.h"
 <<<<<<< HEAD
-#include "VulkanBackend.h"
-=======
 #include "VulkanBackend.h" // Needed for GPUTexture and backend pointer
->>>>>>> origin/main
+=======
+#include "VulkanBackend.h"
+>>>>>>> 02ac69b (Save local changes)
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
@@ -32,6 +32,15 @@ public:
 
   // GPU Data
 <<<<<<< HEAD
+  GPUTexture heightMapTexture;
+  GPUTexture splatMapTexture;
+
+  // Constructor
+  TerrainSystem() : width(512), depth(512), scale(1.0f), maxHeight(50.0f) {}
+  TerrainSystem(int width, int depth, float scale, float maxHeight);
+
+  void Initialize(VulkanBackend *backend);
+=======
   VulkanBackend* backend = nullptr;
   GPUTexture heightTex;
   GPUTexture splatTex;
@@ -42,16 +51,7 @@ public:
 
   // Initialization & GPU Upload
   void Initialize(VulkanBackend* backend);
-=======
-  GPUTexture heightMapTexture;
-  GPUTexture splatMapTexture;
-
-  // Constructor
-  TerrainSystem() : width(512), depth(512), scale(1.0f), maxHeight(50.0f) {}
-  TerrainSystem(int width, int depth, float scale, float maxHeight);
-
-  void Initialize(VulkanBackend *backend);
->>>>>>> origin/main
+>>>>>>> 02ac69b (Save local changes)
 
   // Core Funcs
   void Bake();

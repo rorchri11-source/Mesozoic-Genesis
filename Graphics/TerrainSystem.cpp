@@ -1,4 +1,5 @@
 #include "TerrainSystem.h"
+#include <cstdint>
 #include <iostream>
 
 namespace Mesozoic {
@@ -8,6 +9,12 @@ TerrainSystem::TerrainSystem(int w, int d, float s, float mh)
     : width(w), depth(d), scale(s), maxHeight(mh) {}
 
 <<<<<<< HEAD
+void TerrainSystem::Initialize(VulkanBackend *b) {
+  std::cout << "[TerrainSystem] Initializing..." << std::endl;
+  backend = b;
+  Bake();
+  CreateTerrainTextures();
+=======
 void TerrainSystem::Initialize(VulkanBackend *backend) {
   this->backend = backend;
   Bake();
@@ -24,13 +31,7 @@ void TerrainSystem::Initialize(VulkanBackend *backend) {
 
   // Update Global Terrain Descriptors
   backend->UpdateDescriptorSets(heightTex, splatTex);
-=======
-void TerrainSystem::Initialize(VulkanBackend *b) {
-  std::cout << "[TerrainSystem] Initializing..." << std::endl;
-  backend = b;
-  Bake();
-  CreateTerrainTextures();
->>>>>>> origin/main
+>>>>>>> 02ac69b (Save local changes)
 }
 
 void TerrainSystem::Bake() {

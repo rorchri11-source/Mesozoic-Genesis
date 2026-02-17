@@ -41,9 +41,9 @@ struct RenderObject {
 // Camera
 // =========================================================================
 struct Camera {
-  std::array<float, 3> position = {0, 50, -100};
-  std::array<float, 3> target = {0, 0, 0};
-  std::array<float, 3> up = {0, 1, 0};
+  glm::vec3 position = {0, 50, -100};
+  glm::vec3 target = {0, 0, 0};
+  glm::vec3 up = {0, 1, 0};
   float fov = 60.0f; // degrees
   float nearPlane = 0.1f;
   float farPlane = 5000.0f;
@@ -55,15 +55,11 @@ struct Camera {
 
   // Helper methods
   glm::vec3 GetForward() const {
-    glm::vec3 p(position[0], position[1], position[2]);
-    glm::vec3 t(target[0], target[1], target[2]);
-    return glm::normalize(t - p);
+    return glm::normalize(target - position);
   }
 
   glm::vec3 GetRight() const {
-    glm::vec3 f = GetForward();
-    glm::vec3 u(up[0], up[1], up[2]);
-    return glm::normalize(glm::cross(f, u));
+    return glm::normalize(glm::cross(GetForward(), up));
   }
 
   glm::vec3 GetUp() const {
@@ -83,9 +79,7 @@ struct Camera {
     fwd = glm::vec3(pitchRot * glm::vec4(fwd, 0.0f));
 
     // Update target
-    glm::vec3 p(position[0], position[1], position[2]);
-    glm::vec3 newTarget = p + fwd;
-    target = {newTarget.x, newTarget.y, newTarget.z};
+    target = position + fwd;
   }
 };
 
@@ -131,8 +125,8 @@ struct LODConfig {
 // =========================================================================
 class Renderer {
 public:
-  VulkanBackend backend;
-  Window *window;
+  VulkanBackend* backend = nullptr;
+  Window *window = nullptr;
   Camera camera;
   SceneUniforms sceneData;
 
@@ -157,9 +151,13 @@ public:
   uint32_t trianglesThisFrame = 0;
   uint32_t instancesThisFrame = 0;
 
-  bool Initialize(Window &window) {
-    if (!backend.Initialize(window)) {
-      return false;
+  bool Initialize(Window &win, VulkanBackend* backendPtr) {
+    window = &win;
+    backend = backendPtr;
+
+    if (!backend || !backend->initialized) {
+        std::cerr << "[Renderer] Backend not initialized!" << std::endl;
+        return false;
     }
 
     // Setup default LOD config for dinosaurs
@@ -178,9 +176,9 @@ public:
   }
 
   uint32_t RegisterMesh(const UberMesh &mesh) {
-    if (!backend.initialized)
+    if (!backend || !backend->initialized)
       return 0xFFFFFFFF;
-    GPUMesh gpuMesh = backend.UploadMesh(mesh.baseVertices, mesh.indices);
+    GPUMesh gpuMesh = backend->UploadMesh(mesh.baseVertices, mesh.indices);
     gpuMeshes.push_back(gpuMesh);
     meshRegistry.push_back(mesh); // Keep CPU copy for metadata
     return (uint32_t)gpuMeshes.size() - 1;
@@ -196,11 +194,11 @@ public:
 
     // 1. Acquire swapchain image
     uint32_t imageIndex = 0;
-    if (!backend.BeginFrame(imageIndex))
+    if (!backend->BeginFrame(imageIndex))
       return;
 
     // Single pass for now (since we currently have one simplified RenderPass)
-    backend.BeginRenderPass(RenderPassType::GBuffer, imageIndex);
+    backend->BeginRenderPass(RenderPassType::GBuffer, imageIndex);
 
     RenderShadows();
     RenderGBuffer();
@@ -209,10 +207,10 @@ public:
     RenderPostProcess();
     RenderUI(imageIndex);
 
-    backend.EndRenderPass();
+    backend->EndRenderPass();
 
     // 8. Present
-    backend.EndFrame(imageIndex);
+    backend->EndFrame(imageIndex);
   }
 
   void SubmitEntity(const RenderObject &obj) { renderQueue.push_back(obj); }
@@ -224,20 +222,22 @@ public:
   }
 
   void Cleanup() {
-    backend.WaitIdle();
-    for (auto &mesh : gpuMeshes) {
-      backend.DestroyMesh(mesh);
+    if (backend) {
+        backend->WaitIdle();
+        for (auto &mesh : gpuMeshes) {
+          backend->DestroyMesh(mesh);
+        }
     }
     gpuMeshes.clear();
-    backend.Cleanup();
+    // Do not clean up backend here as we do not own it
   }
 
 private:
   void RenderShadows() { drawCallsThisFrame++; }
 
   void RenderGBuffer() {
-    backend.BindPipeline(backend.graphicsPipeline);
-    backend.BindTerrainTextures();
+    backend->BindPipeline(backend->graphicsPipeline);
+    backend->BindTerrainTextures();
 
     for (const auto &obj : renderQueue) {
       if (!obj.visible)
@@ -270,9 +270,9 @@ private:
       push.mvp = mvp;
       push.color = obj.color;
       push.time = sceneData.time;
-      push.camX = camera.position[0];
-      push.camY = camera.position[1];
-      push.camZ = camera.position[2];
+      push.camX = camera.position.x;
+      push.camY = camera.position.y;
+      push.camZ = camera.position.z;
       push.modX = obj.worldTransform[12];
       push.modY = obj.worldTransform[13];
       push.modZ = obj.worldTransform[14];
@@ -303,17 +303,17 @@ private:
         }
       }
 
-      backend.PushConstants(backend.pipelineLayout,
+      backend->PushConstants(backend->pipelineLayout,
                             VK_SHADER_STAGE_VERTEX_BIT |
                                 VK_SHADER_STAGE_FRAGMENT_BIT,
                             0, sizeof(PushData), &push);
 
       // Special check for grass instancing (flagged by alpha 0.5)
       if (abs(obj.color[3] - 0.5f) < 0.01f) {
-        backend.DrawMeshInstanced(gpuMeshes[obj.meshIndex], 800000);
+        backend->DrawMeshInstanced(gpuMeshes[obj.meshIndex], 800000);
         instancesThisFrame += 800000;
       } else {
-        backend.DrawMesh(gpuMeshes[obj.meshIndex]);
+        backend->DrawMesh(gpuMeshes[obj.meshIndex]);
         instancesThisFrame++;
       }
 
@@ -331,7 +331,7 @@ private:
 
   void RenderUI(uint32_t imageIndex) {
     if (uiSystem) {
-      VkCommandBuffer cmd = backend.GetCommandBuffer(imageIndex);
+      VkCommandBuffer cmd = backend->GetCommandBuffer(imageIndex);
       if (cmd) {
         uiSystem->EndFrame(cmd);
       }

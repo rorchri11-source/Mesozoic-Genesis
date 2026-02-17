@@ -59,6 +59,12 @@ typedef uint32_t VkShaderStageFlags;
 #define VK_FORMAT_D32_SFLOAT 126
 #define VK_SHADER_STAGE_VERTEX_BIT 0x00000001
 #define VK_SHADER_STAGE_FRAGMENT_BIT 0x00000010
+
+typedef void *VkSampler;
+typedef uint32_t VkImageLayout;
+#define VK_FORMAT_UNDEFINED 0
+#define VK_FORMAT_R8G8B8A8_UNORM 44
+#define VK_FORMAT_R32_SFLOAT 100
 #endif
 
 namespace Mesozoic {
@@ -942,6 +948,7 @@ private:
 #endif
   }
 
+public:
   // NEW: Update existing texture with new data (for Terrain Painting)
   void UpdateTexture(GPUTexture &texture, void *data, size_t size) {
 #if VULKAN_SDK_AVAILABLE
@@ -989,6 +996,8 @@ private:
     DestroyBuffer(staging);
 #endif
   }
+
+  bool CreateInstance(Window &window) {
 #if VULKAN_SDK_AVAILABLE
   VkInstanceCreateInfo createInfo{};
   createInfo.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
@@ -1754,3 +1763,6 @@ VkCommandBuffer GetCommandBuffer(uint32_t imageIndex) {
 #endif
 }
 };
+
+} // namespace Graphics
+} // namespace Mesozoic
