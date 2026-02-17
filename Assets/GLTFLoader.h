@@ -178,13 +178,23 @@ private:
     Value v;
     v.type = Type::Number;
     size_t start = pos;
-    if (s[pos] == '-')
+    if (pos < s.size() && s[pos] == '-')
       pos++;
     while (pos < s.size() &&
            (std::isdigit(s[pos]) || s[pos] == '.' || s[pos] == 'e' ||
             s[pos] == 'E' || s[pos] == '+' || s[pos] == '-'))
       pos++;
-    v.number = std::stod(s.substr(start, pos - start));
+
+    std::string numStr = s.substr(start, pos - start);
+    try {
+      if (!numStr.empty()) {
+        v.number = std::stod(numStr);
+      } else {
+        v.number = 0.0;
+      }
+    } catch (...) {
+      v.number = 0.0;
+    }
     return v;
   }
 
