@@ -1,4 +1,5 @@
 #include "TerrainSystem.h"
+#include <cstdint>
 #include <iostream>
 
 namespace Mesozoic {
