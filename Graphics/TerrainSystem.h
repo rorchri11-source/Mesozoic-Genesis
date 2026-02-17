@@ -1,3 +1,4 @@
+// Resolved Conflicts
 #pragma once
 #include "../Core/Math/Vec3.h"
 #include "Renderer.h"
