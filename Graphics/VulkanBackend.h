@@ -202,7 +202,7 @@ public:
   VkDescriptorSetLayout descriptorSetLayout = VK_NULL_HANDLE;
   VkDescriptorPool descriptorPool = VK_NULL_HANDLE;
   VkDescriptorSet descriptorSet = VK_NULL_HANDLE;
-  VkDescriptorSet uiDescriptorSet = VK_NULL_HANDLE;
+  // VkDescriptorSet uiDescriptorSet = VK_NULL_HANDLE; // Moved to UISystem management
 
   SwapchainData swapchain;
   std::vector<RenderPassData> renderPasses;
@@ -243,6 +243,7 @@ public:
                                     &descriptorSetLayout) != VK_SUCCESS) {
       return false;
     }
+
     return true;
 #else
     return true;
@@ -253,28 +254,38 @@ public:
 #if VULKAN_SDK_AVAILABLE
     std::array<VkDescriptorPoolSize, 1> poolSizes{};
     poolSizes[0].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-    poolSizes[0].descriptorCount = 100;
+    poolSizes[0].descriptorCount = 2048; // Significantly increased
 
     VkDescriptorPoolCreateInfo poolInfo{};
     poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+    poolInfo.flags = VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT; // Allow freeing (or resetting)
     poolInfo.poolSizeCount = static_cast<uint32_t>(poolSizes.size());
     poolInfo.pPoolSizes = poolSizes.data();
-    poolInfo.maxSets = 10;
+    poolInfo.maxSets = 2048; // Significantly increased
 
     if (vkCreateDescriptorPool(device, &poolInfo, nullptr, &descriptorPool) !=
         VK_SUCCESS) {
       return false;
     }
-
-    // Allocate UI Descriptor Set (Reusing the same layout for simplicity)
-    if (vkAllocateDescriptorSets(device, &allocInfo, &uiDescriptorSet) !=
-        VK_SUCCESS) {
-      return false;
-    }
-
+    // Note: We don't allocate uiDescriptorSet here anymore, UISystem will manage it
     return true;
 #else
     return true;
+#endif
+  }
+
+  // Helper to allocate dynamic descriptor set
+  bool AllocateDescriptorSet(VkDescriptorSet& set) {
+#if VULKAN_SDK_AVAILABLE
+    VkDescriptorSetAllocateInfo allocInfo{};
+    allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+    allocInfo.descriptorPool = descriptorPool;
+    allocInfo.descriptorSetCount = 1;
+    allocInfo.pSetLayouts = &descriptorSetLayout;
+
+    return vkAllocateDescriptorSets(device, &allocInfo, &set) == VK_SUCCESS;
+#else
+    return false;
 #endif
   }
 
@@ -394,7 +405,7 @@ public:
 #endif
   }
 
-  void BindTexture(GPUTexture &texture, VkCommandBuffer cmd) {
+  void BindTexture(GPUTexture &texture, VkCommandBuffer cmd, VkDescriptorSet targetSet) {
 #if VULKAN_SDK_AVAILABLE
     if (!texture.IsValid())
       return;
@@ -406,7 +417,7 @@ public:
 
     VkWriteDescriptorSet descriptorWrite{};
     descriptorWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-    descriptorWrite.dstSet = uiDescriptorSet; // Update UI specific set
+    descriptorWrite.dstSet = targetSet;
     descriptorWrite.dstBinding = 1; // UI Shader uses Binding 1
     descriptorWrite.dstArrayElement = 0;
     descriptorWrite.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
@@ -416,7 +427,7 @@ public:
     vkUpdateDescriptorSets(device, 1, &descriptorWrite, 0, nullptr);
 
     vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
-                            pipelineLayout, 0, 1, &uiDescriptorSet, 0, nullptr);
+                            pipelineLayout, 0, 1, &targetSet, 0, nullptr);
 #endif
   }
 
@@ -543,6 +554,11 @@ public:
       vkDestroyPipeline(device, uiPipeline, nullptr);
     if (pipelineLayout)
       vkDestroyPipelineLayout(device, pipelineLayout, nullptr);
+
+    if (descriptorSetLayout)
+      vkDestroyDescriptorSetLayout(device, descriptorSetLayout, nullptr);
+    if (descriptorPool)
+      vkDestroyDescriptorPool(device, descriptorPool, nullptr);
 
     for (int i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
       if (frames[i].imageAvailable)
@@ -1673,7 +1689,7 @@ bool CreateUIPipeline(const std::string &vertPath,
     pushConstantRange.offset = 0;
     pushConstantRange.size = 128; // Up to 128 bytes
 
-    // Reusing pipelineLayout for now as per previous logic
+    // Reusing descriptorSetLayout which is compatible (contains Binding 1)
     VkPipelineLayoutCreateInfo pipelineLayoutInfo{};
     pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
     pipelineLayoutInfo.setLayoutCount = 1;

@@ -30,6 +30,13 @@ public:
   // Batch of draw calls
   std::vector<UIElement> drawList;
 
+  // UI Descriptor Pool (local)
+  // Actually we will use backend's pool to allocate sets, but we need to track them to reset?
+  // Ideally UISystem has its own pool.
+  VkDescriptorPool uiDescriptorPool = VK_NULL_HANDLE;
+  std::vector<VkDescriptorSet> descriptorSets; // One per draw call if needed
+  uint32_t currentSetIndex = 0;
+
   // Quad mesh (shared)
   UberMesh quadMesh;
   uint32_t quadMeshId;

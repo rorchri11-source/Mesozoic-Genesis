@@ -8,6 +8,24 @@ void UISystem::Initialize(VulkanBackend *backend, Window *window) {
   this->backend = backend;
   this->window = window;
   CreateQuadMesh();
+
+  // Create local descriptor pool for UI
+#if VULKAN_SDK_AVAILABLE
+  std::array<VkDescriptorPoolSize, 1> poolSizes{};
+  poolSizes[0].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+  poolSizes[0].descriptorCount = 1000;
+
+  VkDescriptorPoolCreateInfo poolInfo{};
+  poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+  poolInfo.flags = 0; // No reset individual, we reset whole pool
+  poolInfo.poolSizeCount = static_cast<uint32_t>(poolSizes.size());
+  poolInfo.pPoolSizes = poolSizes.data();
+  poolInfo.maxSets = 1000;
+
+  vkCreateDescriptorPool(backend->device, &poolInfo, nullptr, &uiDescriptorPool);
+
+  // Pre-allocate sets? No, dynamic.
+#endif
 }
 
 void UISystem::CreateQuadMesh() {
@@ -83,6 +101,13 @@ void UISystem::CreateQuadMesh() {
 
 void UISystem::BeginFrame() {
   drawList.clear();
+#if VULKAN_SDK_AVAILABLE
+  if (uiDescriptorPool != VK_NULL_HANDLE) {
+    vkResetDescriptorPool(backend->device, uiDescriptorPool, 0);
+  }
+#endif
+  currentSetIndex = 0;
+  descriptorSets.clear(); // We just clear the vector, the handles are invalid after reset
 
   // Update Projection (Ortho 0..W, 0..H)
   float w = (float)window->config.width;
@@ -175,8 +200,25 @@ void UISystem::EndFrame(VkCommandBuffer commandBuffer) {
 
     // Bind Texture if changed
     if (el.texture != lastTex) {
-      backend->BindTexture(*el.texture, commandBuffer);
-      lastTex = el.texture;
+      // Allocate new descriptor set for this draw call
+      VkDescriptorSetAllocateInfo allocInfo{};
+      allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+      allocInfo.descriptorPool = uiDescriptorPool;
+      allocInfo.descriptorSetCount = 1;
+      allocInfo.pSetLayouts = &backend->descriptorSetLayout; // Reusing terrain layout which matches?
+      // Wait, terrain layout has 2 bindings (height, splat). UI shader uses binding 1 (texSampler).
+      // We need to ensure we use a layout compatible with UI.
+      // Ideally UI should have its own layout.
+      // Current implementation: UI shader has `layout(binding = 1) uniform sampler2D texSampler;`
+      // Terrain layout has bindings 0 and 1.
+      // So if we allocate using terrain layout, we have slots 0 and 1.
+      // We bind 1. This is compatible if we ignore slot 0.
+
+      VkDescriptorSet set;
+      if (vkAllocateDescriptorSets(backend->device, &allocInfo, &set) == VK_SUCCESS) {
+          backend->BindTexture(*el.texture, commandBuffer, set);
+          lastTex = el.texture;
+      }
     }
 
     vkCmdDrawIndexed(commandBuffer, quadMesh.indexCount, 1, 0, 0, 0);
