@@ -115,6 +115,11 @@ public:
   // LOD configuration per species
   std::vector<LODConfig> lodConfigs;
 
+  // Day/Night Cycle
+  float dayTime = 8.0f;      // 0..24 hours
+  float daySpeed = 0.1f;     // Hours per second (realtime = 1/3600 ~ 0.00027)
+  bool isDayCyclePaused = false;
+
   // Stats
   uint32_t drawCallsThisFrame = 0;
   uint32_t trianglesThisFrame = 0;
@@ -148,13 +153,45 @@ public:
     return (uint32_t)gpuMeshes.size() - 1;
   }
 
+  void UpdateMesh(uint32_t meshId, const std::vector<Vertex> &vertices) {
+    if (meshId >= gpuMeshes.size())
+      return;
+
+    size_t dataSize = vertices.size() * sizeof(Vertex);
+    if (gpuMeshes[meshId].vertexBuffer.size < dataSize) {
+      // If buffer is too small, destroy and recreate
+      backend.DestroyBuffer(gpuMeshes[meshId].vertexBuffer);
+      // Re-create vertex buffer
+      // Note: Indices remain same, indexCount remains same
+      // This is a simplified "Update" for vertex data only.
+      // Re-upload logic:
+      // We can't reuse UploadMesh because it returns a full GPUMesh struct.
+      // We just need a new GPUBuffer for vertices.
+
+      // For now, let's assume size is constant (terrain grid doesn't change resolution).
+      std::cerr << "[Renderer] Warning: UpdateMesh called with larger size than buffer. Ignoring resize." << std::endl;
+      return;
+    }
+
+    backend.UpdateBuffer(gpuMeshes[meshId].vertexBuffer, vertices.data(), dataSize);
+  }
+
   void RenderFrame(float deltaTime) {
     drawCallsThisFrame = 0;
     trianglesThisFrame = 0;
     instancesThisFrame = 0;
 
     // Update scene uniforms
-    sceneData.time += deltaTime;
+    if (!isDayCyclePaused) {
+        dayTime += daySpeed * deltaTime;
+        if (dayTime >= 24.0f) dayTime -= 24.0f;
+    }
+
+    // Map dayTime (0..24) to shader time (0..2PI approx or just linear)
+    // Shader expects float time.
+    // We can pass dayTime directly, but shader needs to wrap it or use sin/cos.
+    // Let's pass dayTime as "time".
+    sceneData.time = dayTime;
 
     // 1. Acquire swapchain image
     uint32_t imageIndex = 0;

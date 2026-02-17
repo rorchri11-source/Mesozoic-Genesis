@@ -920,6 +920,31 @@ private:
     DestroyBuffer(staging);
 #endif
   }
+
+  // NEW: Update Buffer Data (for Dynamic Meshes)
+  void UpdateBuffer(GPUBuffer &dstBuffer, const void *data, size_t size) {
+#if VULKAN_SDK_AVAILABLE
+    if (!dstBuffer.IsValid())
+      return;
+
+    // 1. Create Staging Buffer
+    GPUBuffer staging = CreateBuffer(size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+                                     VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
+                                         VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+
+    // 2. Map & Copy
+    if (staging.mapped) {
+      memcpy(staging.mapped, data, size);
+    }
+
+    // 3. Copy Buffer to Buffer
+    CopyBuffer(staging.buffer, dstBuffer.buffer, size);
+
+    // 4. Cleanup
+    DestroyBuffer(staging);
+#endif
+  }
+
 #if VULKAN_SDK_AVAILABLE
   VkInstanceCreateInfo createInfo{};
   createInfo.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;

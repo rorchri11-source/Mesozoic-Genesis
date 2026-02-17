@@ -10,9 +10,10 @@ layout(location = 6) in vec4 fragSplat; // From Vertex (Set 0, Binding 1 sample)
 
 layout(location = 0) out vec4 outColor;
 
-const vec3 L = normalize(vec3(0.5, 1.0, 0.4));
-const vec3 SUN_COLOR = vec3(1.4, 1.3, 1.1);
-const vec3 AMBIENT = vec3(0.2, 0.25, 0.35);
+// Day/Night Logic computed from fragTime (0..24)
+// const vec3 L = normalize(vec3(0.5, 1.0, 0.4));
+// const vec3 SUN_COLOR = vec3(1.4, 1.3, 1.1);
+// const vec3 AMBIENT = vec3(0.2, 0.25, 0.35);
 
 // Simple hash for micro-detail
 float hash12(vec2 p) {
@@ -22,13 +23,66 @@ float hash12(vec2 p) {
 }
 
 void main() {
+    // --- Day/Night Calculation ---
+    // fragTime is dayTime (0..24)
+    float timeNorm = mod(fragTime, 24.0) / 24.0;
+    float theta = (timeNorm * 6.28318) - 1.57079; // Start at -PI/2 (6h -> 0)
+    // Actually simpler:
+    // 6h (0.25) -> want sin=0, cos=1?
+    // Let's align 12h (0.5) to Zenith (Y=1).
+    // sin(PI/2) = 1.
+    // 12h -> theta = PI/2.
+    // timeNorm * 2PI + offset = PI/2.
+    // 0.5 * 2PI + offset = PI/2 => PI + offset = PI/2 => offset = -PI/2.
+    theta = timeNorm * 6.28318 - 1.57079;
+
+    vec3 L = normalize(vec3(cos(theta), sin(theta), 0.2));
+    float sunHeight = max(L.y, 0.0); // 0 to 1
+
+    // Sun Color Ramp
+    // Night (H < 0) -> Blue
+    // Horizon (H ~ 0) -> Red/Orange
+    // Zenith (H ~ 1) -> White
+    vec3 sunZenith = vec3(1.4, 1.3, 1.1);
+    vec3 sunHorizon = vec3(1.5, 0.6, 0.2);
+    vec3 sunNight = vec3(0.05, 0.05, 0.1);
+
+    vec3 SUN_COLOR;
+    vec3 AMBIENT;
+    vec3 SKY_TOP;
+    vec3 SKY_HORIZON;
+
+    if (L.y > 0.0) {
+        // Day
+        float t = pow(sunHeight, 0.5); // non-linear for longer sunset
+        SUN_COLOR = mix(sunHorizon, sunZenith, t);
+        AMBIENT = mix(vec3(0.1, 0.1, 0.15), vec3(0.2, 0.25, 0.35), t);
+        SKY_TOP = mix(vec3(0.1, 0.1, 0.2), vec3(0.08, 0.15, 0.4), t); // Dark blue -> Deep blue
+        SKY_HORIZON = mix(vec3(0.8, 0.3, 0.1), vec3(0.55, 0.75, 1.0), t); // Orange -> Cyan
+    } else {
+        // Night
+        SUN_COLOR = sunNight; // Moon?
+        AMBIENT = vec3(0.02, 0.02, 0.05);
+        SKY_TOP = vec3(0.0, 0.0, 0.05);
+        SKY_HORIZON = vec3(0.01, 0.01, 0.05);
+        // Moon direction opposite to sun?
+        L = -L;
+        L.y = max(L.y, 0.1); // Fake moon always somewhat up? Or just keep it dark.
+    }
+
     float dist = length(fragWorldPos - fragCameraPos);
     vec3 rd = normalize(fragWorldPos - fragCameraPos);
 
     // --- SKY ---
     if (fragColor.a < 0.01) {
         float h = max(rd.y, 0.0);
-        vec3 sky = mix(vec3(0.55, 0.75, 1.0), vec3(0.08, 0.15, 0.4), pow(h, 0.45));
+        // Gradient
+        vec3 sky = mix(SKY_HORIZON, SKY_TOP, pow(h, 0.45));
+
+        // Sun Disc
+        float sunSpec = pow(max(dot(rd, normalize(vec3(cos(theta), sin(theta), 0.2))), 0.0), 200.0);
+        sky += sunSpec * SUN_COLOR;
+
         outColor = vec4(sky, 1.0);
         return;
     }
