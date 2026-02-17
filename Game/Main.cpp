@@ -1,25 +1,19 @@
-<<<<<<< HEAD
 #include "../Assets/GLTFLoader.h"
-=======
-#include "../AssetLoaders/GLTFLoader.h" // Fixed include path based on file structure
-#include "../Assets/MorphTargetExtractor.h" // For Dino DNA
->>>>>>> 02ac69b (Save local changes)
+#include "../Assets/MorphTargetExtractor.h"
+#include "../Assets/TextureLoader.h"
 #include "../Core/Simulation/SimulationManager.h"
 #include "../Graphics/Renderer.h"
-#include "../Graphics/TerrainSystem.h"
 #include "../Graphics/TerrainGenerator.h"
-#include "../Assets/TextureLoader.h"
+#include "../Graphics/TerrainSystem.h"
 #include "../Graphics/UI/UISystem.h"
 #include "../Graphics/Window.h"
 #include <chrono>
-<<<<<<< HEAD
 #include <cstdint>
-=======
 #include <cstring>
->>>>>>> 02ac69b (Save local changes)
+#include <glm/glm.hpp> // Ensure GLM is included for vec3 math
 #include <iostream>
 #include <thread>
-#include <glm/glm.hpp> // Ensure GLM is included for vec3 math
+
 
 using namespace Mesozoic;
 using namespace Mesozoic::Graphics;
@@ -83,8 +77,8 @@ int main() {
   // 1. White Texture for UI
   TextureLoader texLoader;
   std::vector<uint8_t> whitePx = {255, 255, 255, 255};
-  GPUTexture whiteTex =
-      backend.CreateTextureFromBuffer(whitePx.data(), whitePx.size(), 1, 1, VK_FORMAT_R8G8B8A8_UNORM);
+  GPUTexture whiteTex = backend.CreateTextureFromBuffer(
+      whitePx.data(), whitePx.size(), 1, 1, VK_FORMAT_R8G8B8A8_UNORM);
 
   // 2. Initial Ecosystem
   std::cout << ">> Spawning initial ecosystem..." << std::endl;
@@ -140,12 +134,13 @@ int main() {
 
   // --- MORPH SYSTEM SETUP ---
   // Generate Procedural Morphs for Dino
-  auto morphSet = Assets::MorphTargetExtractor::GenerateDinosaurMorphs(gltfDino);
+  auto morphSet =
+      Assets::MorphTargetExtractor::GenerateDinosaurMorphs(gltfDino);
 
   // Flatten for GPU (Target_Snout, Target_Bulk, Target_Horn)
   struct ShaderMorphDelta {
-      float p[4];
-      float n[4];
+    float p[4];
+    float n[4];
   };
   std::vector<ShaderMorphDelta> morphData;
   size_t dinoVertCount = dinoMesh.baseVertices.size();
@@ -153,28 +148,31 @@ int main() {
   morphData.resize(dinoVertCount * 3);
 
   // Helper to copy
-  auto CopyTargetToBuffer = [&](const std::string& name, int targetIndex) {
-      for(const auto& t : morphSet.targets) {
-          if(t.name == name) {
-              for(size_t i=0; i<dinoVertCount && i<t.positionDeltas.size(); ++i) {
-                  size_t dstIdx = targetIndex * dinoVertCount + i;
-                  morphData[dstIdx].p[0] = t.positionDeltas[i].x;
-                  morphData[dstIdx].p[1] = t.positionDeltas[i].y;
-                  morphData[dstIdx].p[2] = t.positionDeltas[i].z;
-                  morphData[dstIdx].p[3] = 0.0f; // Padding
+  auto CopyTargetToBuffer = [&](const std::string &name, int targetIndex) {
+    for (const auto &t : morphSet.targets) {
+      if (t.name == name) {
+        for (size_t i = 0; i < dinoVertCount && i < t.positionDeltas.size();
+             ++i) {
+          size_t dstIdx = targetIndex * dinoVertCount + i;
+          morphData[dstIdx].p[0] = t.positionDeltas[i].x;
+          morphData[dstIdx].p[1] = t.positionDeltas[i].y;
+          morphData[dstIdx].p[2] = t.positionDeltas[i].z;
+          morphData[dstIdx].p[3] = 0.0f; // Padding
 
-                  if (i < t.normalDeltas.size()) {
-                    morphData[dstIdx].n[0] = t.normalDeltas[i].x;
-                    morphData[dstIdx].n[1] = t.normalDeltas[i].y;
-                    morphData[dstIdx].n[2] = t.normalDeltas[i].z;
-                    morphData[dstIdx].n[3] = 0.0f;
-                  }
-              }
-              std::cout << "[Main] Bound Morph Target: " << name << " to index " << targetIndex << std::endl;
-              return;
+          if (i < t.normalDeltas.size()) {
+            morphData[dstIdx].n[0] = t.normalDeltas[i].x;
+            morphData[dstIdx].n[1] = t.normalDeltas[i].y;
+            morphData[dstIdx].n[2] = t.normalDeltas[i].z;
+            morphData[dstIdx].n[3] = 0.0f;
           }
+        }
+        std::cout << "[Main] Bound Morph Target: " << name << " to index "
+                  << targetIndex << std::endl;
+        return;
       }
-      std::cerr << "[Main] Warning: Morph Target '" << name << "' not found!" << std::endl;
+    }
+    std::cerr << "[Main] Warning: Morph Target '" << name << "' not found!"
+              << std::endl;
   };
 
   CopyTargetToBuffer("Target_Snout", 0);
@@ -185,8 +183,7 @@ int main() {
   GPUBuffer morphBuffer = backend.CreateBuffer(
       morphData.size() * sizeof(ShaderMorphDelta),
       VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
-      VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
-  );
+      VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
 
   // Staging upload (using a temp staging buffer manually or helper?)
   // VulkanBackend::CreateBuffer creates DEVICE_LOCAL but doesn't upload.
@@ -195,17 +192,19 @@ int main() {
   // Or just use HOST_VISIBLE for simplicity?
   // Let's use HOST_VISIBLE for prototype simplicity.
   backend.DestroyBuffer(morphBuffer); // Re-create as host visible
-  morphBuffer = backend.CreateBuffer(
-      morphData.size() * sizeof(ShaderMorphDelta),
-      VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
-      VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT
-  );
+  morphBuffer =
+      backend.CreateBuffer(morphData.size() * sizeof(ShaderMorphDelta),
+                           VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
+                           VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
+                               VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
   if (morphBuffer.mapped) {
-      memcpy(morphBuffer.mapped, morphData.data(), morphData.size() * sizeof(ShaderMorphDelta));
+    memcpy(morphBuffer.mapped, morphData.data(),
+           morphData.size() * sizeof(ShaderMorphDelta));
   }
 
   // Update Global Descriptors (Terrain + Morph)
-  backend.UpdateDescriptorSets(terrainSystem.heightTex, terrainSystem.splatTex, &morphBuffer);
+  backend.UpdateDescriptorSets(terrainSystem.heightTex, terrainSystem.splatTex,
+                               &morphBuffer);
 
   // Morph Weights UI State
   float wSnout = 0.0f;
@@ -280,10 +279,14 @@ int main() {
       glm::vec3 right = renderer.camera.GetRight();
 
       // Unified vec3 math
-      if (window.IsKeyPressed('W')) renderer.camera.position += fwd * moveSpeed;
-      if (window.IsKeyPressed('S')) renderer.camera.position -= fwd * moveSpeed;
-      if (window.IsKeyPressed('D')) renderer.camera.position += right * moveSpeed;
-      if (window.IsKeyPressed('A')) renderer.camera.position -= right * moveSpeed;
+      if (window.IsKeyPressed('W'))
+        renderer.camera.position += fwd * moveSpeed;
+      if (window.IsKeyPressed('S'))
+        renderer.camera.position -= fwd * moveSpeed;
+      if (window.IsKeyPressed('D'))
+        renderer.camera.position += right * moveSpeed;
+      if (window.IsKeyPressed('A'))
+        renderer.camera.position -= right * moveSpeed;
 
       if (!editorMode) {
         float dx, dy;
@@ -321,10 +324,10 @@ int main() {
                 .Normalized();
 
         Vec3 hitPos;
-        if (terrainSystem.Raycast(
-                Vec3(renderer.camera.position.x, renderer.camera.position.y,
-                     renderer.camera.position.z),
-                rayDir, hitPos)) {
+        if (terrainSystem.Raycast(Vec3(renderer.camera.position.x,
+                                       renderer.camera.position.y,
+                                       renderer.camera.position.z),
+                                  rayDir, hitPos)) {
           if (window.IsMouseButtonDown(Window::MOUSE_LEFT)) {
             terrainSystem.Paint(hitPos.x, hitPos.z, brushRadius, brushType);
           }
@@ -396,22 +399,26 @@ int main() {
         toggleCooldown -= dt; // Not exact but enough for latch
       }
       static float cooldown = 0.0f;
-      if (cooldown > 0) cooldown -= dt;
+      if (cooldown > 0)
+        cooldown -= dt;
 
       if (editorMode) {
         uiSystem.DrawImage(10, 60, 200, 150, whiteTex, {0, 0, 0, 0.5f});
 
         if (uiSystem.DrawButton(20, 70, 180, 30, whiteTex,
-                                brushType == 0 ? glm::vec4(0.8, 1, 0.8, 1) : glm::vec4(0.5, 0.5, 0.5, 1)))
-             brushType = 0;
+                                brushType == 0 ? glm::vec4(0.8, 1, 0.8, 1)
+                                               : glm::vec4(0.5, 0.5, 0.5, 1)))
+          brushType = 0;
 
         if (uiSystem.DrawButton(20, 110, 180, 30, whiteTex,
-                                brushType == 1 ? glm::vec4(1, 0.8, 0.8, 1) : glm::vec4(0.5, 0.5, 0.5, 1)))
-             brushType = 1;
+                                brushType == 1 ? glm::vec4(1, 0.8, 0.8, 1)
+                                               : glm::vec4(0.5, 0.5, 0.5, 1)))
+          brushType = 1;
 
         if (uiSystem.DrawButton(20, 150, 180, 30, whiteTex,
-                                brushType == 2 ? glm::vec4(0.8, 0.8, 1, 1) : glm::vec4(0.5, 0.5, 0.5, 1)))
-             brushType = 2;
+                                brushType == 2 ? glm::vec4(0.8, 0.8, 1, 1)
+                                               : glm::vec4(0.5, 0.5, 0.5, 1)))
+          brushType = 2;
       }
 
       // Morph Sliders Panel (Bottom Right)
@@ -421,7 +428,8 @@ int main() {
       float panelY = uiSystem.GetScreenHeight() - panelH - 10;
 
       // Background
-      uiSystem.DrawImage(panelX, panelY, panelW, panelH, whiteTex, {0.0f, 0.0f, 0.0f, 0.5f});
+      uiSystem.DrawImage(panelX, panelY, panelW, panelH, whiteTex,
+                         {0.0f, 0.0f, 0.0f, 0.5f});
 
       // Sliders
       float sliderX = panelX + 10;
@@ -431,16 +439,20 @@ int main() {
       float gap = 30;
 
       // Snout
-      if (uiSystem.DrawSlider(sliderX, sliderY, sliderW, sliderH, wSnout, whiteTex, {0.5, 0.2, 0.2, 1}, {1, 0.5, 0.5, 1})) {
-         // Changed
+      if (uiSystem.DrawSlider(sliderX, sliderY, sliderW, sliderH, wSnout,
+                              whiteTex, {0.5, 0.2, 0.2, 1}, {1, 0.5, 0.5, 1})) {
+        // Changed
       }
       // Bulk
-      if (uiSystem.DrawSlider(sliderX, sliderY + gap, sliderW, sliderH, wBulk, whiteTex, {0.2, 0.5, 0.2, 1}, {0.5, 1, 0.5, 1})) {
-         // Changed
+      if (uiSystem.DrawSlider(sliderX, sliderY + gap, sliderW, sliderH, wBulk,
+                              whiteTex, {0.2, 0.5, 0.2, 1}, {0.5, 1, 0.5, 1})) {
+        // Changed
       }
       // Horn
-      if (uiSystem.DrawSlider(sliderX, sliderY + gap*2, sliderW, sliderH, wHorn, whiteTex, {0.2, 0.2, 0.5, 1}, {0.5, 0.5, 1, 1})) {
-         // Changed
+      if (uiSystem.DrawSlider(sliderX, sliderY + gap * 2, sliderW, sliderH,
+                              wHorn, whiteTex, {0.2, 0.2, 0.5, 1},
+                              {0.5, 0.5, 1, 1})) {
+        // Changed
       }
 
       // Update Dino Weights (Assume first entity is our Hero Dino for test)
@@ -454,19 +466,19 @@ int main() {
       // It's fine, next frame will pick up changes.
       // OR we update `sim` entities.
       // `sim.entities` logic is in `sim.Tick`.
-      // We don't have "morphWeights" in `Dinosaur` struct in `SimulationManager`.
-      // But `RenderObject` has it.
-      // We construct `RenderObject` in step 3 of loop.
-      // So we should update `wSnout` etc BEFORE step 3?
-      // UI is immediate mode, so we draw it here. The values `wSnout` persist.
-      // So next frame step 3 will use updated values.
+      // We don't have "morphWeights" in `Dinosaur` struct in
+      // `SimulationManager`. But `RenderObject` has it. We construct
+      // `RenderObject` in step 3 of loop. So we should update `wSnout` etc
+      // BEFORE step 3? UI is immediate mode, so we draw it here. The values
+      // `wSnout` persist. So next frame step 3 will use updated values.
     }
 
     renderer.camera.aspectRatio = (float)config.width / (float)config.height;
 
     Vec3 camPos(renderer.camera.position.x, renderer.camera.position.y,
                 renderer.camera.position.z);
-    Vec3 camFwd(renderer.camera.GetForward().x, renderer.camera.GetForward().y, renderer.camera.GetForward().z);
+    Vec3 camFwd(renderer.camera.GetForward().x, renderer.camera.GetForward().y,
+                renderer.camera.GetForward().z);
 
     renderer.camera.viewMatrix =
         Matrix4::LookAt(camPos, camPos + camFwd, Vec3(0, 1, 0)).m;

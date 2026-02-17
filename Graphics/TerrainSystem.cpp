@@ -8,13 +8,6 @@ namespace Graphics {
 TerrainSystem::TerrainSystem(int w, int d, float s, float mh)
     : width(w), depth(d), scale(s), maxHeight(mh) {}
 
-<<<<<<< HEAD
-void TerrainSystem::Initialize(VulkanBackend *b) {
-  std::cout << "[TerrainSystem] Initializing..." << std::endl;
-  backend = b;
-  Bake();
-  CreateTerrainTextures();
-=======
 void TerrainSystem::Initialize(VulkanBackend *backend) {
   this->backend = backend;
   Bake();
@@ -27,11 +20,11 @@ void TerrainSystem::Initialize(VulkanBackend *backend) {
   // Upload SplatMap
   splatTex = backend->CreateTextureFromBuffer(
       splatMap.data(), splatMap.size(), width, depth,
-      VK_FORMAT_R8G8B8A8_UNORM); // Ensure UNORM for correct color/weight interpretation
+      VK_FORMAT_R8G8B8A8_UNORM); // Ensure UNORM for correct color/weight
+                                 // interpretation
 
   // Update Global Terrain Descriptors
   backend->UpdateDescriptorSets(heightTex, splatTex);
->>>>>>> 02ac69b (Save local changes)
 }
 
 void TerrainSystem::Bake() {
@@ -165,22 +158,6 @@ void TerrainSystem::BakeSplatMap() {
   }
 }
 
-void TerrainSystem::CreateTerrainTextures() {
-  if (!backend)
-    return;
-
-  // HeightMap (R32F)
-  heightMapTexture = backend->CreateTextureFromBuffer(
-      heightMap.data(), heightMap.size() * sizeof(float), width, depth,
-      VK_FORMAT_R32_SFLOAT);
-
-  // SplatMap (RGBA8)
-  splatMapTexture = backend->CreateTextureFromBuffer(
-      splatMap.data(), splatMap.size(), width, depth, VK_FORMAT_R8G8B8A8_UNORM);
-
-  backend->UpdateDescriptorSets(heightMapTexture, splatMapTexture);
-}
-
 float TerrainSystem::GetHeight(float x, float z) const {
   float halfWidth = (width * scale) * 0.5f;
   float halfDepth = (depth * scale) * 0.5f;
@@ -304,8 +281,8 @@ void TerrainSystem::Paint(float x, float z, float radius, int type) {
   }
 
   // Upload if changed
-  if (dirty && backend && splatMapTexture.IsValid()) {
-    backend->UpdateTexture(splatMapTexture, splatMap.data(), splatMap.size());
+  if (dirty && backend && splatTex.IsValid()) {
+    backend->UpdateTexture(splatTex, splatMap.data(), splatMap.size());
   }
 }
 

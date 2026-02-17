@@ -1,15 +1,10 @@
 #pragma once
 #include "../Core/Math/Vec3.h"
-<<<<<<< HEAD
 #include "VulkanBackend.h" // Needed for GPUTexture and backend pointer
-=======
-#include "VulkanBackend.h"
->>>>>>> 02ac69b (Save local changes)
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
 #include <vector>
-
 
 using namespace Mesozoic::Math;
 
@@ -31,17 +26,7 @@ public:
   std::vector<uint8_t> splatMap; // RGBA8
 
   // GPU Data
-<<<<<<< HEAD
-  GPUTexture heightMapTexture;
-  GPUTexture splatMapTexture;
-
-  // Constructor
-  TerrainSystem() : width(512), depth(512), scale(1.0f), maxHeight(50.0f) {}
-  TerrainSystem(int width, int depth, float scale, float maxHeight);
-
-  void Initialize(VulkanBackend *backend);
-=======
-  VulkanBackend* backend = nullptr;
+  // GPU Data
   GPUTexture heightTex;
   GPUTexture splatTex;
 
@@ -50,8 +35,7 @@ public:
   TerrainSystem(int width, int depth, float scale, float maxHeight);
 
   // Initialization & GPU Upload
-  void Initialize(VulkanBackend* backend);
->>>>>>> 02ac69b (Save local changes)
+  void Initialize(VulkanBackend *backend);
 
   // Core Funcs
   void Bake();
@@ -60,7 +44,8 @@ public:
 
   // Editor Funcs
   bool Raycast(Vec3 origin, Vec3 dir, Vec3 &hitPos);
-  void Paint(float x, float z, float radius, int type); // type: 0=Grass, 1=Dirt, 2=Rock
+  void Paint(float x, float z, float radius,
+             int type); // type: 0=Grass, 1=Dirt, 2=Rock
 
   // Helper: Texture Dimensions
   int GetTextureWidth() const { return width; }
@@ -69,7 +54,6 @@ public:
 private:
   void BakeHeightMap();
   void BakeSplatMap();
-  void CreateTerrainTextures();
 
   // Internal Noise Helpers (Private Implementation)
   static float Hash(float n);

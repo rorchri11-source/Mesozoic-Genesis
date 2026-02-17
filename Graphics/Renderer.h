@@ -8,12 +8,11 @@
 #include "VulkanBackend.h"
 #include <array>
 #include <cstdint>
+#include <glm/glm.hpp>
+#include <glm/gtc/matrix_transform.hpp>
 #include <iostream>
 #include <string>
 #include <vector>
-#include <glm/glm.hpp>
-#include <glm/gtc/matrix_transform.hpp>
-
 
 namespace Mesozoic {
 namespace Graphics {
@@ -54,17 +53,13 @@ struct Camera {
   std::array<float, 16> projMatrix;
 
   // Helper methods
-  glm::vec3 GetForward() const {
-    return glm::normalize(target - position);
-  }
+  glm::vec3 GetForward() const { return glm::normalize(target - position); }
 
   glm::vec3 GetRight() const {
     return glm::normalize(glm::cross(GetForward(), up));
   }
 
-  glm::vec3 GetUp() const {
-    return glm::cross(GetRight(), GetForward());
-  }
+  glm::vec3 GetUp() const { return glm::cross(GetRight(), GetForward()); }
 
   void Rotate(float yaw, float pitch) {
     glm::vec3 fwd = GetForward();
@@ -125,7 +120,7 @@ struct LODConfig {
 // =========================================================================
 class Renderer {
 public:
-  VulkanBackend* backend = nullptr;
+  VulkanBackend *backend = nullptr;
   Window *window = nullptr;
   Camera camera;
   SceneUniforms sceneData;
@@ -151,13 +146,13 @@ public:
   uint32_t trianglesThisFrame = 0;
   uint32_t instancesThisFrame = 0;
 
-  bool Initialize(Window &win, VulkanBackend* backendPtr) {
+  bool Initialize(Window &win, VulkanBackend *backendPtr) {
     window = &win;
     backend = backendPtr;
 
     if (!backend || !backend->initialized) {
-        std::cerr << "[Renderer] Backend not initialized!" << std::endl;
-        return false;
+      std::cerr << "[Renderer] Backend not initialized!" << std::endl;
+      return false;
     }
 
     // Setup default LOD config for dinosaurs
@@ -223,10 +218,10 @@ public:
 
   void Cleanup() {
     if (backend) {
-        backend->WaitIdle();
-        for (auto &mesh : gpuMeshes) {
-          backend->DestroyMesh(mesh);
-        }
+      backend->WaitIdle();
+      for (auto &mesh : gpuMeshes) {
+        backend->DestroyMesh(mesh);
+      }
     }
     gpuMeshes.clear();
     // Do not clean up backend here as we do not own it
@@ -256,7 +251,8 @@ private:
       model.m = obj.worldTransform;
       Mesozoic::Math::Matrix4 mvp = vp * model;
 
-      // Push Constants (Model Matrix + Color + Time + CamPos + ModelPos + Morphs)
+      // Push Constants (Model Matrix + Color + Time + CamPos + ModelPos +
+      // Morphs)
       struct PushData {
         Mesozoic::Math::Matrix4 mvp;
         std::array<float, 4> color;
@@ -278,35 +274,34 @@ private:
       push.modZ = obj.worldTransform[14];
 
       // Default to 0
-      push.morphWeights = {0,0,0,0};
+      push.morphWeights = {0, 0, 0, 0};
       push.vertexCount = 0;
 
       // If object has morph weights, use them
       if (!obj.morphWeights.empty()) {
-        for(size_t i=0; i<obj.morphWeights.size() && i<4; ++i) {
-            push.morphWeights[i] = obj.morphWeights[i];
+        for (size_t i = 0; i < obj.morphWeights.size() && i < 4; ++i) {
+          push.morphWeights[i] = obj.morphWeights[i];
         }
-        // Assuming meshIndex corresponds to registered mesh, we need vertex count
-        // gpuMeshes doesn't store vertex count in easily accessible way?
-        // GPUMesh struct has indexCount. But we need VERTEX count for shader indexing?
-        // Wait, shader uses gl_VertexIndex.
-        // If we use separate buffer for deltas, we need to know the offset or assume 1:1 mapping.
-        // If we bind the buffer for THIS mesh, then offset is 0.
-        // But we bind ONE global buffer?
-        // No, plan is to use ONE buffer for Dino and bind it globally.
-        // Terrain renders with vertexCount=0, so shader skips morphing.
-        // Dino renders with vertexCount=DinoVerts.
-        // We need to know DinoVerts.
-        // gpuMeshes doesn't store it. meshRegistry stores UberMesh which has baseVertices.size().
+        // Assuming meshIndex corresponds to registered mesh, we need vertex
+        // count gpuMeshes doesn't store vertex count in easily accessible way?
+        // GPUMesh struct has indexCount. But we need VERTEX count for shader
+        // indexing? Wait, shader uses gl_VertexIndex. If we use separate buffer
+        // for deltas, we need to know the offset or assume 1:1 mapping. If we
+        // bind the buffer for THIS mesh, then offset is 0. But we bind ONE
+        // global buffer? No, plan is to use ONE buffer for Dino and bind it
+        // globally. Terrain renders with vertexCount=0, so shader skips
+        // morphing. Dino renders with vertexCount=DinoVerts. We need to know
+        // DinoVerts. gpuMeshes doesn't store it. meshRegistry stores UberMesh
+        // which has baseVertices.size().
         if (obj.meshIndex < meshRegistry.size()) {
-             push.vertexCount = (uint32_t)meshRegistry[obj.meshIndex].baseVertices.size();
+          push.vertexCount =
+              (uint32_t)meshRegistry[obj.meshIndex].baseVertices.size();
         }
       }
-
       backend->PushConstants(backend->pipelineLayout,
-                            VK_SHADER_STAGE_VERTEX_BIT |
-                                VK_SHADER_STAGE_FRAGMENT_BIT,
-                            0, sizeof(PushData), &push);
+                             VK_SHADER_STAGE_VERTEX_BIT |
+                                 VK_SHADER_STAGE_FRAGMENT_BIT,
+                             0, sizeof(PushData), &push);
 
       // Special check for grass instancing (flagged by alpha 0.5)
       if (abs(obj.color[3] - 0.5f) < 0.01f) {
