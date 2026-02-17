@@ -15,33 +15,40 @@ else()
 endif()
 
 # ==================== GLFW (optional) ====================
-# Try to find GLFW via find_package first (system install)
-find_package(glfw3 QUIET)
-if(glfw3_FOUND)
-    message(STATUS "GLFW found via find_package")
-    set(GLFW_AVAILABLE TRUE)
-else()
-    # Try FetchContent if git is available
-    find_program(GIT_PROGRAM git)
-    if(GIT_PROGRAM)
-        message(STATUS "Fetching GLFW via FetchContent...")
-        include(FetchContent)
-        FetchContent_Declare(
-            glfw
-            GIT_REPOSITORY https://github.com/glfw/glfw.git
-            GIT_TAG        3.4
-            GIT_SHALLOW    TRUE
-        )
-        set(GLFW_BUILD_DOCS OFF CACHE BOOL "" FORCE)
-        set(GLFW_BUILD_TESTS OFF CACHE BOOL "" FORCE)
-        set(GLFW_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
-        set(GLFW_INSTALL OFF CACHE BOOL "" FORCE)
-        FetchContent_MakeAvailable(glfw)
+option(BUILD_HEADLESS "Build without graphics/windowing support" OFF)
+
+if(NOT BUILD_HEADLESS)
+    # Try to find GLFW via find_package first (system install)
+    find_package(glfw3 QUIET)
+    if(glfw3_FOUND)
+        message(STATUS "GLFW found via find_package")
         set(GLFW_AVAILABLE TRUE)
     else()
-        message(STATUS "GLFW not found and git not available - building headless (no windowing)")
-        set(GLFW_AVAILABLE FALSE)
+        # Try FetchContent if git is available
+        find_program(GIT_PROGRAM git)
+        if(GIT_PROGRAM)
+            message(STATUS "Fetching GLFW via FetchContent...")
+            include(FetchContent)
+            FetchContent_Declare(
+                glfw
+                GIT_REPOSITORY https://github.com/glfw/glfw.git
+                GIT_TAG        3.4
+                GIT_SHALLOW    TRUE
+            )
+            set(GLFW_BUILD_DOCS OFF CACHE BOOL "" FORCE)
+            set(GLFW_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+            set(GLFW_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+            set(GLFW_INSTALL OFF CACHE BOOL "" FORCE)
+            FetchContent_MakeAvailable(glfw)
+            set(GLFW_AVAILABLE TRUE)
+        else()
+            message(STATUS "GLFW not found and git not available - building headless (no windowing)")
+            set(GLFW_AVAILABLE FALSE)
+        endif()
     endif()
+else()
+    message(STATUS "Headless build requested - disabling GLFW and windowing")
+    set(GLFW_AVAILABLE FALSE)
 endif()
 
 # ==================== GLM ====================

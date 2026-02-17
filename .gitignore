@@ -2,6 +2,7 @@
 build/
 bin/
 out/
+build_headless/
 
 # CMake
 CMakeCache.txt
