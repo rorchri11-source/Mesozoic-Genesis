@@ -198,9 +198,11 @@ public:
 
   VkPipelineLayout pipelineLayout = VK_NULL_HANDLE;
   VkPipeline graphicsPipeline = VK_NULL_HANDLE;
+  VkPipeline uiPipeline = VK_NULL_HANDLE;
   VkDescriptorSetLayout descriptorSetLayout = VK_NULL_HANDLE;
   VkDescriptorPool descriptorPool = VK_NULL_HANDLE;
   VkDescriptorSet descriptorSet = VK_NULL_HANDLE;
+  VkDescriptorSet uiDescriptorSet = VK_NULL_HANDLE;
 
   SwapchainData swapchain;
   std::vector<RenderPassData> renderPasses;
@@ -263,6 +265,13 @@ public:
         VK_SUCCESS) {
       return false;
     }
+
+    // Allocate UI Descriptor Set (Reusing the same layout for simplicity)
+    if (vkAllocateDescriptorSets(device, &allocInfo, &uiDescriptorSet) !=
+        VK_SUCCESS) {
+      return false;
+    }
+
     return true;
 #else
     return true;
@@ -385,6 +394,32 @@ public:
 #endif
   }
 
+  void BindTexture(GPUTexture &texture, VkCommandBuffer cmd) {
+#if VULKAN_SDK_AVAILABLE
+    if (!texture.IsValid())
+      return;
+
+    VkDescriptorImageInfo imageInfo{};
+    imageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+    imageInfo.imageView = texture.view;
+    imageInfo.sampler = texture.sampler;
+
+    VkWriteDescriptorSet descriptorWrite{};
+    descriptorWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    descriptorWrite.dstSet = uiDescriptorSet; // Update UI specific set
+    descriptorWrite.dstBinding = 1; // UI Shader uses Binding 1
+    descriptorWrite.dstArrayElement = 0;
+    descriptorWrite.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+    descriptorWrite.descriptorCount = 1;
+    descriptorWrite.pImageInfo = &imageInfo;
+
+    vkUpdateDescriptorSets(device, 1, &descriptorWrite, 0, nullptr);
+
+    vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS,
+                            pipelineLayout, 0, 1, &uiDescriptorSet, 0, nullptr);
+#endif
+  }
+
   void WaitIdle() {
 #if VULKAN_SDK_AVAILABLE
     if (device)
@@ -504,6 +539,8 @@ public:
 
     if (graphicsPipeline)
       vkDestroyPipeline(device, graphicsPipeline, nullptr);
+    if (uiPipeline)
+      vkDestroyPipeline(device, uiPipeline, nullptr);
     if (pipelineLayout)
       vkDestroyPipelineLayout(device, pipelineLayout, nullptr);
 
@@ -1661,7 +1698,7 @@ bool CreateUIPipeline(const std::string &vertPath,
     pipelineInfo.subpass = 0;
 
     if (vkCreateGraphicsPipelines(device, VK_NULL_HANDLE, 1, &pipelineInfo,
-                                  nullptr, &graphicsPipeline) != VK_SUCCESS) {
+                                  nullptr, &uiPipeline) != VK_SUCCESS) {
       throw std::runtime_error("failed to create UI pipeline!");
     }
 

@@ -7,6 +7,13 @@ namespace Graphics {
 TerrainSystem::TerrainSystem(int w, int d, float s, float mh)
     : width(w), depth(d), scale(s), maxHeight(mh) {}
 
+void TerrainSystem::Initialize(VulkanBackend *b) {
+  std::cout << "[TerrainSystem] Initializing..." << std::endl;
+  backend = b;
+  Bake();
+  CreateTerrainTextures();
+}
+
 void TerrainSystem::Bake() {
   std::cout << "[TerrainSystem] Baking HeightMap..." << std::endl;
   BakeHeightMap();
@@ -138,6 +145,22 @@ void TerrainSystem::BakeSplatMap() {
   }
 }
 
+void TerrainSystem::CreateTerrainTextures() {
+  if (!backend)
+    return;
+
+  // HeightMap (R32F)
+  heightMapTexture = backend->CreateTextureFromBuffer(
+      heightMap.data(), heightMap.size() * sizeof(float), width, depth,
+      VK_FORMAT_R32_SFLOAT);
+
+  // SplatMap (RGBA8)
+  splatMapTexture = backend->CreateTextureFromBuffer(
+      splatMap.data(), splatMap.size(), width, depth, VK_FORMAT_R8G8B8A8_UNORM);
+
+  backend->UpdateDescriptorSets(heightMapTexture, splatMapTexture);
+}
+
 float TerrainSystem::GetHeight(float x, float z) const {
   float halfWidth = (width * scale) * 0.5f;
   float halfDepth = (depth * scale) * 0.5f;
@@ -184,6 +207,86 @@ Vec3 TerrainSystem::GetNormal(float x, float z) const {
   float hU = GetHeight(x, z + eps);
 
   return Vec3(hL - hR, 2.0f * eps, hD - hU).Normalized();
+}
+
+bool TerrainSystem::Raycast(Vec3 origin, Vec3 dir, Vec3 &hitPos) {
+  // Simple stepping DDA-like approach
+  Vec3 p = origin;
+  Vec3 step = dir.Normalized() * (scale * 0.5f); // Half grid step resolution
+
+  // Max distance
+  float maxDist = 1000.0f;
+  float dist = 0.0f;
+
+  while (dist < maxDist) {
+    p = p + step;
+    dist += step.Length();
+
+    // Bounds check
+    float halfWidth = (width * scale) * 0.5f;
+    float halfDepth = (depth * scale) * 0.5f;
+    if (p.x < -halfWidth || p.x > halfWidth || p.z < -halfDepth ||
+        p.z > halfDepth) {
+      continue;
+    }
+
+    float h = GetHeight(p.x, p.z);
+    if (p.y <= h) {
+      hitPos = p;
+      return true;
+    }
+  }
+  return false;
+}
+
+void TerrainSystem::Paint(float x, float z, float radius, int type) {
+  // x, z are world coords. Convert to texture coords.
+  float halfWidth = (width * scale) * 0.5f;
+  float halfDepth = (depth * scale) * 0.5f;
+
+  int cx = (int)((x + halfWidth) / scale);
+  int cz = (int)((z + halfDepth) / scale);
+
+  int r = (int)(radius / scale);
+
+  bool dirty = false;
+
+  for (int j = -r; j <= r; ++j) {
+    for (int i = -r; i <= r; ++i) {
+      int tx = cx + i;
+      int tz = cz + j;
+
+      if (tx < 0 || tx >= width || tz < 0 || tz >= depth)
+        continue;
+      if (i * i + j * j > r * r)
+        continue;
+
+      int idx = (tz * width + tx) * 4;
+
+      // Simple paint: set channel based on type
+      // type 0: Grass (Red), 1: Dirt (Green), 2: Rock (Blue)
+      // We could do blending, but hard replacement is simpler for "Paint"
+      if (type == 0) {
+        splatMap[idx + 0] = 255;
+        splatMap[idx + 1] = 0;
+        splatMap[idx + 2] = 0;
+      } else if (type == 1) {
+        splatMap[idx + 0] = 0;
+        splatMap[idx + 1] = 255;
+        splatMap[idx + 2] = 0;
+      } else if (type == 2) {
+        splatMap[idx + 0] = 0;
+        splatMap[idx + 1] = 0;
+        splatMap[idx + 2] = 255;
+      }
+      dirty = true;
+    }
+  }
+
+  // Upload if changed
+  if (dirty && backend && splatMapTexture.IsValid()) {
+    backend->UpdateTexture(splatMapTexture, splatMap.data(), splatMap.size());
+  }
 }
 
 } // namespace Graphics

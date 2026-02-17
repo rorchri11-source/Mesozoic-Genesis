@@ -33,6 +33,11 @@ public:
   static constexpr int MOUSE_MIDDLE = 2;
 
   std::array<bool, 8> mouseButtons; // Track mouse buttons
+  std::array<bool, 512> keys;
+  bool shouldClose = false;
+  bool cursorLocked = false;
+  float lastMouseX = 0, lastMouseY = 0;
+  float mouseDeltaX = 0, mouseDeltaY = 0;
 
   Window() {
     keys.fill(false);
@@ -45,7 +50,36 @@ public:
 
   // ... (PollEvents remains check)
 
-  // ... (ShouldClose/IsMinimized check)
+  bool ShouldClose() const { return shouldClose; }
+
+  void SetTitle(const std::string& title) {
+    SetWindowTextA(handle, title.c_str());
+  }
+
+  void SetCursorLocked(bool locked) {
+    cursorLocked = locked;
+    ShowCursor(!locked);
+    if (locked) {
+      // Center cursor
+      POINT pt = {static_cast<LONG>(config.width / 2),
+                  static_cast<LONG>(config.height / 2)};
+      lastMouseX = (float)pt.x;
+      lastMouseY = (float)pt.y;
+      ClientToScreen(handle, &pt);
+      SetCursorPos(pt.x, pt.y);
+    }
+  }
+
+  void GetMouseDelta(float& dx, float& dy) {
+    dx = mouseDeltaX;
+    dy = mouseDeltaY;
+    mouseDeltaX = 0;
+    mouseDeltaY = 0;
+  }
+
+  std::vector<const char*> GetRequiredVulkanExtensions() {
+    return { "VK_KHR_surface", "VK_KHR_win32_surface" };
+  }
 
   bool IsKeyPressed(int key) const {
     if (key < 0 || key >= 512)
