@@ -1,8 +1,9 @@
-#include "../AssetLoaders/GLTFLoader.h"
+#include "../Assets/GLTFLoader.h"
 #include "../Core/Simulation/SimulationManager.h"
 #include "../Graphics/Renderer.h"
 #include "../Graphics/TerrainSystem.h"
-#include "../Graphics/TextureLoader.h"
+#include "../Graphics/TerrainGenerator.h"
+#include "../Assets/TextureLoader.h"
 #include "../Graphics/UI/UISystem.h"
 #include "../Graphics/Window.h"
 #include <chrono>
@@ -13,6 +14,7 @@
 using namespace Mesozoic;
 using namespace Mesozoic::Graphics;
 using namespace Mesozoic::Core;
+using namespace Mesozoic::Assets;
 
 // Game State Enum
 enum class GameState { MENU, PLAYING };
@@ -53,7 +55,7 @@ int main() {
   }
 
   Renderer renderer;
-  if (!renderer.Initialize(window)) {
+  if (!renderer.Initialize(window, &backend)) {
     return -1;
   }
 
@@ -63,7 +65,7 @@ int main() {
 
   // Simulation
   SimulationManager sim;
-  sim.Initialize();
+  // sim.Initialize(); // Removed as it doesn't exist
   sim.terrainSystem = &terrainSystem;
 
   // --- ASSET LOADING ---
@@ -72,7 +74,7 @@ int main() {
   TextureLoader texLoader;
   std::vector<uint8_t> whitePx = {255, 255, 255, 255};
   GPUTexture whiteTex =
-      backend.CreateTexture(whitePx.data(), 1, 1, VK_FORMAT_R8G8B8A8_UNORM);
+      backend.CreateTextureFromBuffer(whitePx.data(), whitePx.size(), 1, 1, VK_FORMAT_R8G8B8A8_UNORM);
 
   // 2. Initial Ecosystem
   std::cout << ">> Spawning initial ecosystem..." << std::endl;
@@ -353,6 +355,7 @@ int main() {
   }
 
   renderer.Cleanup();
+  backend.Cleanup();
   window.Cleanup();
   return 0;
 }
