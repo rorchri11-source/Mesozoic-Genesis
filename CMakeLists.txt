@@ -44,16 +44,28 @@ else()
     endif()
 endif()
 
+# ==================== GLM ====================
+include(FetchContent)
+FetchContent_Declare(
+    glm
+    GIT_REPOSITORY https://github.com/g-truc/glm.git
+    GIT_TAG        0.9.9.8
+    GIT_SHALLOW    TRUE
+)
+FetchContent_MakeAvailable(glm)
+
 # ==================== TESTS ====================
 set(TEST_SOURCES Tests/CoreTests.cpp)
 
 add_executable(MesozoicTests ${TEST_SOURCES})
+target_link_libraries(MesozoicTests PRIVATE glm::glm)
 target_include_directories(MesozoicTests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
 # ==================== GAME ====================
-set(GAME_SOURCES Game/Main.cpp Graphics/TerrainSystem.cpp)
+set(GAME_SOURCES Game/Main.cpp Graphics/TerrainSystem.cpp Graphics/UI/UISystem.cpp)
 
 add_executable(MesozoicGenesis ${GAME_SOURCES})
+target_link_libraries(MesozoicGenesis PRIVATE glm::glm)
 target_include_directories(MesozoicGenesis PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
 # Link optional dependencies
@@ -103,8 +115,25 @@ if(GLSLC)
         DEPENDS ${SHADER_SOURCE_DIR}/shader.frag
         COMMENT "Compiling shader.frag"
     )
+    add_custom_command(
+        OUTPUT ${SHADER_BINARY_DIR}/ui.vert.spv
+        COMMAND ${GLSLC} ${SHADER_SOURCE_DIR}/ui.vert -o ${SHADER_BINARY_DIR}/ui.vert.spv
+        DEPENDS ${SHADER_SOURCE_DIR}/ui.vert
+        COMMENT "Compiling ui.vert"
+    )
+    add_custom_command(
+        OUTPUT ${SHADER_BINARY_DIR}/ui.frag.spv
+        COMMAND ${GLSLC} ${SHADER_SOURCE_DIR}/ui.frag -o ${SHADER_BINARY_DIR}/ui.frag.spv
+        DEPENDS ${SHADER_SOURCE_DIR}/ui.frag
+        COMMENT "Compiling ui.frag"
+    )
     
-    add_custom_target(CompileShaders ALL DEPENDS ${SHADER_BINARY_DIR}/vert.spv ${SHADER_BINARY_DIR}/frag.spv)
+    add_custom_target(CompileShaders ALL DEPENDS
+        ${SHADER_BINARY_DIR}/vert.spv
+        ${SHADER_BINARY_DIR}/frag.spv
+        ${SHADER_BINARY_DIR}/ui.vert.spv
+        ${SHADER_BINARY_DIR}/ui.frag.spv
+    )
     
     # Copy shaders to executable directory for Debug/Release
     add_custom_command(TARGET CompileShaders POST_BUILD
@@ -112,6 +141,10 @@ if(GLSLC)
         ${SHADER_BINARY_DIR}/vert.spv $<TARGET_FILE_DIR:MesozoicGenesis>/vert.spv
         COMMAND ${CMAKE_COMMAND} -E copy_if_different
         ${SHADER_BINARY_DIR}/frag.spv $<TARGET_FILE_DIR:MesozoicGenesis>/frag.spv
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        ${SHADER_BINARY_DIR}/ui.vert.spv $<TARGET_FILE_DIR:MesozoicGenesis>/ui.vert.spv
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        ${SHADER_BINARY_DIR}/ui.frag.spv $<TARGET_FILE_DIR:MesozoicGenesis>/ui.frag.spv
     )
     
     add_dependencies(MesozoicGenesis CompileShaders)

@@ -1,6 +1,6 @@
 #pragma once
-#include "../Graphics/VulkanBackend.h"
-#include "../Graphics/Window.h"
+#include "../VulkanBackend.h"
+#include "../Window.h"
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <string>
@@ -31,7 +31,7 @@ public:
   std::vector<UIElement> drawList;
 
   // Quad mesh (shared)
-  UberMesh quadMesh;
+  GPUMesh quadMesh;
   uint32_t quadMeshId;
 
   void Initialize(VulkanBackend *backend, Window *window);
@@ -45,6 +45,10 @@ public:
   bool DrawButton(float x, float y, float w, float h, GPUTexture &texture,
                   glm::vec4 color = {1, 1, 1, 1},
                   glm::vec4 hoverColor = {0.8, 0.8, 0.8, 1});
+
+  bool DrawSlider(float x, float y, float w, float h, float &value, GPUTexture &texture,
+                  glm::vec4 color = {0.5, 0.5, 0.5, 1},
+                  glm::vec4 knobColor = {1, 1, 1, 1});
 
   // Helper to get screen size
   float GetScreenWidth() const { return (float)window->config.width; }

@@ -1,6 +1,5 @@
-// Resolved Conflicts
 #include "TerrainSystem.h"
-#include "Renderer.h"
+#include <cstdint>
 #include <iostream>
 
 namespace Mesozoic {
@@ -11,6 +10,7 @@ TerrainSystem::TerrainSystem(int w, int d, float s, float mh)
 
 void TerrainSystem::Initialize(Renderer *r, int w, int d, float s, float mh) {
   renderer = r;
+  backend = r->backend;
   width = w;
   depth = d;
   scale = s;
@@ -20,17 +20,17 @@ void TerrainSystem::Initialize(Renderer *r, int w, int d, float s, float mh) {
 
   // Create GPU Textures
   // HeightMap: R32_SFLOAT
-  heightMapTex = renderer->backend.CreateTextureFromBuffer(
+  heightTex = backend->CreateTextureFromBuffer(
       heightMap.data(), heightMap.size() * sizeof(float), width, depth,
       VK_FORMAT_R32_SFLOAT);
 
   // SplatMap: R8G8B8A8_UNORM
-  splatMapTex = renderer->backend.CreateTextureFromBuffer(
+  splatTex = backend->CreateTextureFromBuffer(
       splatMap.data(), splatMap.size() * sizeof(uint8_t), width, depth,
       VK_FORMAT_R8G8B8A8_UNORM);
 
   // Update Global Descriptor Set
-  renderer->backend.UpdateDescriptorSets(heightMapTex, splatMapTex);
+  backend->UpdateDescriptorSets(heightTex, splatTex);
 
   // Generate Mesh
   std::cout << "[TerrainSystem] Generating Mesh..." << std::endl;
@@ -185,9 +185,12 @@ float TerrainSystem::GetHeight(float x, float z) const {
   float tx = u - x0;
   float tz = v - z0;
 
-  if (x0 < 0 || x0 >= width || z0 < 0 || z0 >= depth) return 0.0f;
-  if (x1 >= width) x1 = width - 1;
-  if (z1 >= depth) z1 = depth - 1;
+  if (x0 < 0 || x0 >= width || z0 < 0 || z0 >= depth)
+    return 0.0f;
+  if (x1 >= width)
+    x1 = width - 1;
+  if (z1 >= depth)
+    z1 = depth - 1;
 
   float h00 = heightMap[z0 * width + x0];
   float h10 = heightMap[z0 * width + x1];
@@ -210,29 +213,22 @@ Vec3 TerrainSystem::GetNormal(float x, float z) const {
 }
 
 bool TerrainSystem::Raycast(const Vec3 &origin, const Vec3 &dir, float &t,
-                            Vec3 &hitPoint) const {
+                            Vec3 &hitPos) const {
   float step = scale * 0.5f;
   float maxDist = 2000.0f;
   Vec3 currentPos = origin;
   float d = 0.0f;
 
-  // Simple optimization: Start ray from top of bounding box?
-  // Not strictly necessary for mouse picking which usually points down.
-
   while (d < maxDist) {
     currentPos = origin + dir * d;
     float h = GetHeight(currentPos.x, currentPos.z);
 
-    // Check if under terrain
-    // Note: GetHeight clamps to edges.
     if (currentPos.y < h) {
-        // Binary search refinement could go here for precision
-        t = d;
-        hitPoint = currentPos;
-        hitPoint.y = h;
-        return true;
+      t = d;
+      hitPos = currentPos;
+      hitPos.y = h;
+      return true;
     }
-
     d += step;
   }
   return false;
@@ -260,54 +256,42 @@ void TerrainSystem::ModifyHeight(float worldX, float worldZ, float radius,
   minZ = std::max(0, minZ);
   maxZ = std::min(depth - 1, maxZ);
 
-  // If mode == 2 (Flatten), targetHeight is passed in.
-  // If not passed (default 0), main.cpp should have handled logic to pass the correct height.
-  // Wait, if ModifyHeight is called from UI, main.cpp needs to pass it.
-
   bool dirty = false;
   for (int z = minZ; z <= maxZ; ++z) {
     for (int x = minX; x <= maxX; ++x) {
-        float dx = (x - centerU);
-        float dz = (z - centerV);
-        float distSq = dx*dx + dz*dz;
-        if (distSq < radiusGrid * radiusGrid) {
-            float dist = std::sqrt(distSq);
-            float falloff = 1.0f - (dist / radiusGrid);
-            falloff = falloff * falloff; // smooth quadratic falloff
+      float dx = (x - centerU);
+      float dz = (z - centerV);
+      float distSq = dx * dx + dz * dz;
+      if (distSq < radiusGrid * radiusGrid) {
+        float dist = std::sqrt(distSq);
+        float falloff = 1.0f - (dist / radiusGrid);
+        falloff = falloff * falloff; // smooth quadratic falloff
 
-            int idx = z * width + x;
-            float currentH = heightMap[idx];
+        int idx = z * width + x;
+        float currentH = heightMap[idx];
 
-            if (mode == 0) { // Raise
-                heightMap[idx] += strength * falloff;
-            } else if (mode == 1) { // Lower
-                heightMap[idx] -= strength * falloff;
-            } else if (mode == 2) { // Flatten
-                // Lerp towards target
-                heightMap[idx] += (targetHeight - currentH) * strength * falloff;
-            }
-            dirty = true;
+        if (mode == 0) { // Raise
+          heightMap[idx] += strength * falloff;
+        } else if (mode == 1) { // Lower
+          heightMap[idx] -= strength * falloff;
+        } else if (mode == 2) { // Flatten
+          // Lerp towards target
+          heightMap[idx] += (targetHeight - currentH) * strength * falloff;
         }
+        dirty = true;
+      }
     }
   }
 
   if (dirty) {
-      UpdateMesh();
-      UpdateTextures();
+    UpdateMesh();
+    UpdateTextures();
   }
 }
 
 void TerrainSystem::UpdateMesh() {
-  if (!renderer || meshId == 0xFFFFFFFF) return;
-
-  // We only need to update Y positions and Normals in the mesh vertices
-  // But UpdateMesh takes a full vector of Vertex.
-  // So we update our CPU copy 'mesh' and send it.
-
-  // Recalculate all vertices? Or just the ones we touched?
-  // Renderer::UpdateMesh replaces the WHOLE buffer.
-  // So we must update the whole CPU mesh.
-  // Optimization: Keep CPU mesh up to date.
+  if (!renderer || meshId == 0xFFFFFFFF)
+    return;
 
   float halfWidth = (width * scale) * 0.5f;
   float halfDepth = (depth * scale) * 0.5f;
@@ -326,14 +310,60 @@ void TerrainSystem::UpdateMesh() {
 }
 
 void TerrainSystem::UpdateTextures() {
-  if (!renderer) return;
+  if (!backend)
+    return;
   // Upload new heightMap data to GPU texture
-  // Texture is R32_SFLOAT, heightMap is float[]. Matches.
-  renderer->backend.UpdateTexture(heightMapTex, heightMap.data(), heightMap.size() * sizeof(float));
+  backend->UpdateTexture(heightTex, heightMap.data(),
+                         heightMap.size() * sizeof(float));
+}
 
-  // Note: Splat map update logic is not implemented in ModifyHeight yet,
-  // but if we did painting, we would call:
-  // renderer->backend.UpdateTexture(splatMapTex, splatMap.data(), splatMap.size() * sizeof(uint8_t));
+void TerrainSystem::Paint(float x, float z, float radius, int type) {
+  // x, z are world coords. Convert to texture coords.
+  float halfWidth = (width * scale) * 0.5f;
+  float halfDepth = (depth * scale) * 0.5f;
+
+  int cx = (int)((x + halfWidth) / scale);
+  int cz = (int)((z + halfDepth) / scale);
+
+  int r = (int)(radius / scale);
+
+  bool dirty = false;
+
+  for (int j = -r; j <= r; ++j) {
+    for (int i = -r; i <= r; ++i) {
+      int tx = cx + i;
+      int tz = cz + j;
+
+      if (tx < 0 || tx >= width || tz < 0 || tz >= depth)
+        continue;
+      if (i * i + j * j > r * r)
+        continue;
+
+      int idx = (tz * width + tx) * 4;
+
+      // Simple paint: set channel based on type
+      // type 0: Grass (Red), 1: Dirt (Green), 2: Rock (Blue)
+      if (type == 0) {
+        splatMap[idx + 0] = 255;
+        splatMap[idx + 1] = 0;
+        splatMap[idx + 2] = 0;
+      } else if (type == 1) {
+        splatMap[idx + 0] = 0;
+        splatMap[idx + 1] = 255;
+        splatMap[idx + 2] = 0;
+      } else if (type == 2) {
+        splatMap[idx + 0] = 0;
+        splatMap[idx + 1] = 0;
+        splatMap[idx + 2] = 255;
+      }
+      dirty = true;
+    }
+  }
+
+  // Upload if changed
+  if (dirty && backend && splatTex.IsValid()) {
+    backend->UpdateTexture(splatTex, splatMap.data(), splatMap.size());
+  }
 }
 
 } // namespace Graphics

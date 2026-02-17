@@ -191,6 +191,65 @@ public:
       set.targets.push_back(target);
     }
 
+    // --- Majungasaurus Specific Targets ---
+
+    // Target_Snout: Elongate snout (+30%)
+    {
+      MorphTarget target;
+      target.name = "Target_Snout";
+      target.positionDeltas.resize(vertCount);
+      target.normalDeltas.resize(vertCount, Vec3(0, 0, 0));
+      for (size_t v = 0; v < vertCount; v++) {
+        float z = set.baseMesh[v].position.z;
+        // Assume snout starts at Z > 1.5 (based on dino size 6.0f length)
+        if (z > 1.5f) {
+          float factor = (z - 1.5f);
+          target.positionDeltas[v] =
+              Vec3(0, 0, factor * 0.3f); // Stretch forward along Z
+        }
+      }
+      set.targets.push_back(target);
+    }
+
+    // Target_Bulk: Muscle mass (+20%)
+    {
+      MorphTarget target;
+      target.name = "Target_Bulk";
+      target.positionDeltas.resize(vertCount);
+      target.normalDeltas.resize(vertCount, Vec3(0, 0, 0));
+      for (size_t v = 0; v < vertCount; v++) {
+        // Expand along normal
+        target.positionDeltas[v] = set.baseMesh[v].normal * 0.2f;
+      }
+      set.targets.push_back(target);
+    }
+
+    // Target_Horn: Frontal horn size
+    {
+      MorphTarget target;
+      target.name = "Target_Horn";
+      target.positionDeltas.resize(vertCount);
+      target.normalDeltas.resize(vertCount, Vec3(0, 0, 0));
+      for (size_t v = 0; v < vertCount; v++) {
+        // Majungasaurus horn: Top of head (Y ~ 2.5), Front (Z ~ 1.5)
+        float y = set.baseMesh[v].position.y;
+        float z = set.baseMesh[v].position.z;
+        float x = set.baseMesh[v].position.x;
+
+        // Simple distance check for "Horn Region"
+        float dy = y - 2.8f; // Slightly above head center
+        float dz = z - 1.2f; // Between eyes and nose
+        float distSq = x*x + dy*dy + dz*dz;
+
+        if (distSq < 0.2f) {
+           float factor = 1.0f - (distSq / 0.2f);
+           factor = factor * factor; // Sharpen
+           target.positionDeltas[v] = Vec3(0, factor * 0.5f, 0); // Grow Up
+        }
+      }
+      set.targets.push_back(target);
+    }
+
     std::cout << "[MorphTargetExtractor] Generated " << set.targets.size()
               << " DNA-driven morph targets for '" << set.meshName << "'"
               << std::endl;

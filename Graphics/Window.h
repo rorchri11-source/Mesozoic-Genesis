@@ -1,15 +1,19 @@
 #pragma once
+
+#include <array>
+#include <iostream>
+#include <string>
+#include <vector>
+
+#ifdef _WIN32
 #ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
 #endif
 #ifndef NOMINMAX
 #define NOMINMAX
 #endif
-#include <array>
-#include <iostream>
-#include <string>
-#include <vector>
 #include <windows.h>
+#endif
 
 namespace Mesozoic {
 namespace Graphics {
@@ -22,6 +26,7 @@ struct WindowConfig {
   bool resizable = true;
 };
 
+#ifdef _WIN32
 class Window {
 public:
   HWND handle = nullptr;
@@ -33,19 +38,97 @@ public:
   static constexpr int MOUSE_MIDDLE = 2;
 
   std::array<bool, 8> mouseButtons; // Track mouse buttons
+  std::array<bool, 512> keys;
+  bool shouldClose = false;
+  bool cursorLocked = false;
+  float lastMouseX = 0, lastMouseY = 0;
+  float mouseDeltaX = 0, mouseDeltaY = 0;
 
   Window() {
     keys.fill(false);
     mouseButtons.fill(false);
   }
 
-  // ... (Initialize remains check)
+  bool Initialize(const WindowConfig& cfg) {
+    config = cfg;
+    hInstance = GetModuleHandle(nullptr);
 
-  // ... (Cleanup remains check)
+    WNDCLASSEX wc = {0};
+    wc.cbSize = sizeof(WNDCLASSEX);
+    wc.style = CS_HREDRAW | CS_VREDRAW;
+    wc.lpfnWndProc = WndProc;
+    wc.hInstance = hInstance;
+    wc.hCursor = LoadCursor(nullptr, IDC_ARROW);
+    wc.lpszClassName = "MesozoicWindowClass";
 
-  // ... (PollEvents remains check)
+    RegisterClassEx(&wc);
 
-  // ... (ShouldClose/IsMinimized check)
+    RECT wr = {0, 0, (LONG)config.width, (LONG)config.height};
+    AdjustWindowRect(&wr, WS_OVERLAPPEDWINDOW, FALSE);
+
+    handle = CreateWindowEx(0, "MesozoicWindowClass", config.title.c_str(),
+                            WS_OVERLAPPEDWINDOW | WS_VISIBLE, CW_USEDEFAULT,
+                            CW_USEDEFAULT, wr.right - wr.left,
+                            wr.bottom - wr.top, nullptr, nullptr, hInstance,
+                            this);
+
+    if (!handle) {
+      std::cerr << "Failed to create window!" << std::endl;
+      return false;
+    }
+
+    return true;
+  }
+
+  void Cleanup() {
+    if (handle) {
+      DestroyWindow(handle);
+      handle = nullptr;
+    }
+    UnregisterClass("MesozoicWindowClass", hInstance);
+  }
+
+  void PollEvents() {
+    MSG msg;
+    while (PeekMessage(&msg, nullptr, 0, 0, PM_REMOVE)) {
+      if (msg.message == WM_QUIT) {
+        shouldClose = true;
+      }
+      TranslateMessage(&msg);
+      DispatchMessage(&msg);
+    }
+  }
+
+  bool ShouldClose() const { return shouldClose; }
+
+  void SetTitle(const std::string& title) {
+    SetWindowTextA(handle, title.c_str());
+  }
+
+  void SetCursorLocked(bool locked) {
+    cursorLocked = locked;
+    ShowCursor(!locked);
+    if (locked) {
+      // Center cursor
+      POINT pt = {static_cast<LONG>(config.width / 2),
+                  static_cast<LONG>(config.height / 2)};
+      lastMouseX = (float)pt.x;
+      lastMouseY = (float)pt.y;
+      ClientToScreen(handle, &pt);
+      SetCursorPos(pt.x, pt.y);
+    }
+  }
+
+  void GetMouseDelta(float& dx, float& dy) {
+    dx = mouseDeltaX;
+    dy = mouseDeltaY;
+    mouseDeltaX = 0;
+    mouseDeltaY = 0;
+  }
+
+  std::vector<const char*> GetRequiredVulkanExtensions() {
+    return { "VK_KHR_surface", "VK_KHR_win32_surface" };
+  }
 
   bool IsKeyPressed(int key) const {
     if (key < 0 || key >= 512)
@@ -76,10 +159,6 @@ public:
     if (y > config.height)
       y = (float)config.height;
   }
-
-  // ... (SetTitle / SetCursorLocked / GetMouseDelta check)
-
-  // ... (GetRequiredVulkanExtensions check)
 
 private:
   static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam,
@@ -131,9 +210,6 @@ private:
         int x = (short)LOWORD(lParam);
         int y = (short)HIWORD(lParam);
 
-        // Always update absolute position tracking
-        // (Though GetMousePosition queries OS directly for fresh data)
-
         if (window->cursorLocked) {
           window->mouseDeltaX += (float)(x - window->lastMouseX);
           window->mouseDeltaY += (float)(y - window->lastMouseY);
@@ -155,6 +231,45 @@ private:
     return DefWindowProc(hwnd, msg, wParam, lParam);
   }
 };
+#else
+// Mock implementation for Linux/Headless Analysis
+class Window {
+public:
+  WindowConfig config;
+  // Mouse Button Constants
+  static constexpr int MOUSE_LEFT = 0;
+  static constexpr int MOUSE_RIGHT = 1;
+  static constexpr int MOUSE_MIDDLE = 2;
+
+  bool shouldClose = false;
+
+  bool Initialize(const WindowConfig& cfg) {
+    config = cfg;
+    std::cout << "[Window] Initialized HEADLESS mode (Linux)." << std::endl;
+    return true;
+  }
+  void Cleanup() {}
+  bool ShouldClose() const { return shouldClose; }
+  void PollEvents() {
+    // Simulate game loop running for a few frames then exit for testing purposes?
+    // Or just let it run until killed?
+    // Main.cpp loops until ShouldClose() is true.
+    // If we want to run analysis, we might want to let it run briefly.
+    // But for now, let's just let it run.
+    // We can simulate an ESC key press after 100 frames if we wanted.
+  }
+  void SetTitle(const std::string&) {}
+  void SetCursorLocked(bool) {}
+  void GetMouseDelta(float& dx, float& dy) { dx = 0; dy = 0; }
+  std::vector<const char*> GetRequiredVulkanExtensions() { return {}; }
+  bool IsKeyPressed(int key) const {
+      // Simulate ESC (27) to close if needed?
+      return false;
+  }
+  bool IsMouseButtonDown(int) const { return false; }
+  void GetMousePosition(float &x, float &y) const { x = 0; y = 0; }
+};
+#endif
 
 } // namespace Graphics
 } // namespace Mesozoic

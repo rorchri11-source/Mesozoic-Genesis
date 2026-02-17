@@ -21,6 +21,7 @@
 #include "../Graphics/Window.h"
 #include "../Physics/CollisionSystem.h"
 #include "../Physics/TerrainHeightmap.h"
+#include "../Physics/IK/CCDSolver.h"
 #include <atomic>
 #include <cassert>
 #include <cmath>
@@ -52,6 +53,101 @@ void TestECSMemory() {
   assert(arch.entitiesPerChunk > 0);
   assert(arch.entitySize == 24); // 12 + 12
   std::cout << "[PASS] ECS Memory Layout validated." << std::endl;
+}
+
+// =========================================================================
+// Test 17: Inverse Kinematics (CCD Solver)
+// =========================================================================
+void TestIK() {
+  std::cout << "[Test] Inverse Kinematics (CCDSolver)..." << std::endl;
+  using namespace Mesozoic::Physics;
+
+  // 1. Edge Case: Empty or single joint
+  {
+    std::vector<IKJoint> joints;
+    assert(CCDSolver::Solve(joints, Vec3(1, 1, 1)) == false);
+
+    joints.push_back({Vec3(0, 0, 0), Quat::Identity()});
+    assert(CCDSolver::Solve(joints, Vec3(1, 1, 1)) == false);
+  }
+
+  // 2. Basic Reachability (2 joints, 1 segment)
+  {
+    std::vector<IKJoint> joints;
+    joints.push_back({Vec3(0, 0, 0), Quat::Identity()});
+    joints.push_back({Vec3(1, 0, 0), Quat::Identity()});
+
+    Vec3 target(0, 1, 0); // 90 degree turn
+    bool reached = CCDSolver::Solve(joints, target, 10, 0.01f);
+
+    assert(reached);
+    assert(Vec3::Distance(joints.back().position, target) < 0.01f);
+    std::cout << "  2-joint reach: OK" << std::endl;
+  }
+
+  // 3. Multi-joint chain (3 joints, 2 segments)
+  {
+    std::vector<IKJoint> joints;
+    joints.push_back({Vec3(0, 0, 0), Quat::Identity()});
+    joints.push_back({Vec3(1, 0, 0), Quat::Identity()});
+    joints.push_back({Vec3(2, 0, 0), Quat::Identity()});
+
+    Vec3 target(1, 1, 0); // Can be reached if it bends
+    bool reached = CCDSolver::Solve(joints, target, 20, 0.01f);
+
+    assert(reached);
+    assert(Vec3::Distance(joints.back().position, target) < 0.01f);
+    std::cout << "  3-joint reach: OK" << std::endl;
+  }
+
+  // 4. Unreachable target
+  {
+    std::vector<IKJoint> joints;
+    joints.push_back({Vec3(0, 0, 0), Quat::Identity()});
+    joints.push_back({Vec3(1, 0, 0), Quat::Identity()});
+
+    Vec3 target(5, 0, 0); // Way out of reach
+    bool reached = CCDSolver::Solve(joints, target, 5, 0.01f);
+
+    assert(!reached);
+    // Should still be pointing towards it
+    assert(joints.back().position.x > 0.99f);
+    assert(std::abs(joints.back().position.y) < 0.01f);
+    std::cout << "  Unreachable target handled: OK" << std::endl;
+  }
+
+  // 5. Joint limits
+  {
+    std::vector<IKJoint> joints;
+    joints.push_back({Vec3(0, 0, 0), Quat::Identity(), -0.1f, 0.1f}); // Very restricted
+    joints.push_back({Vec3(1, 0, 0), Quat::Identity()});
+
+    Vec3 target(0, 1, 0); // Requires 90 deg rotation
+    CCDSolver::Solve(joints, target, 10, 0.01f);
+
+    // End effector should NOT have reached (0,1,0) due to limits
+    assert(joints.back().position.y < 0.2f); // Should be limited to ~sin(0.1) = 0.099
+    std::cout << "  Joint limits respected: OK" << std::endl;
+  }
+
+  // 6. FABRIKBackward pass
+  {
+    std::vector<IKJoint> joints;
+    joints.push_back({Vec3(0, 0, 0), Quat::Identity()});
+    joints.push_back({Vec3(1, 0, 0), Quat::Identity()});
+    joints.push_back({Vec3(2, 0, 0), Quat::Identity()});
+
+    Vec3 target(3, 3, 3);
+    CCDSolver::FABRIKBackward(joints, target);
+
+    assert(Vec3::Distance(joints.back().position, target) < 0.001f);
+    // Bone lengths should be preserved (1.0 each)
+    assert(std::abs(Vec3::Distance(joints[0].position, joints[1].position) - 1.0f) < 0.001f);
+    assert(std::abs(Vec3::Distance(joints[1].position, joints[2].position) - 1.0f) < 0.001f);
+    std::cout << "  FABRIKBackward pass: OK" << std::endl;
+  }
+
+  std::cout << "[PASS] Inverse Kinematics validated." << std::endl;
 }
 
 // =========================================================================
@@ -786,6 +882,7 @@ int main() {
   // Phase 10 tests
   TestTerrainHeightmap();
   TestCollisionSystem();
+  TestIK();
 
   // Phase 11 tests
   TestGameplaySystems();
@@ -794,7 +891,7 @@ int main() {
   TestGraphicsBackend();
 
   std::cout << "\n========================================" << std::endl;
-  std::cout << " All 16 Tests Passed!" << std::endl;
+  std::cout << " All 17 Tests Passed!" << std::endl;
   std::cout << "========================================\n" << std::endl;
   return 0;
 }

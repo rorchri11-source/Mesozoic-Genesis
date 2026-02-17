@@ -8,10 +8,11 @@
 #include "VulkanBackend.h"
 #include <array>
 #include <cstdint>
+#include <glm/glm.hpp>
+#include <glm/gtc/matrix_transform.hpp>
 #include <iostream>
 #include <string>
 #include <vector>
-
 
 namespace Mesozoic {
 namespace Graphics {
@@ -39,9 +40,9 @@ struct RenderObject {
 // Camera
 // =========================================================================
 struct Camera {
-  std::array<float, 3> position = {0, 50, -100};
-  std::array<float, 3> target = {0, 0, 0};
-  std::array<float, 3> up = {0, 1, 0};
+  glm::vec3 position = {0, 50, -100};
+  glm::vec3 target = {0, 0, 0};
+  glm::vec3 up = {0, 1, 0};
   float fov = 60.0f; // degrees
   float nearPlane = 0.1f;
   float farPlane = 5000.0f;
@@ -50,6 +51,31 @@ struct Camera {
   // View-Projection matrix (would be computed with GLM or custom math)
   std::array<float, 16> viewMatrix;
   std::array<float, 16> projMatrix;
+
+  // Helper methods
+  glm::vec3 GetForward() const { return glm::normalize(target - position); }
+
+  glm::vec3 GetRight() const {
+    return glm::normalize(glm::cross(GetForward(), up));
+  }
+
+  glm::vec3 GetUp() const { return glm::cross(GetRight(), GetForward()); }
+
+  void Rotate(float yaw, float pitch) {
+    glm::vec3 fwd = GetForward();
+
+    // Rotate around world up (0,1,0) for yaw
+    glm::mat4 yawRot = glm::rotate(glm::mat4(1.0f), -yaw, glm::vec3(0, 1, 0));
+    fwd = glm::vec3(yawRot * glm::vec4(fwd, 0.0f));
+
+    // Rotate around right vector for pitch
+    glm::vec3 right = glm::cross(fwd, glm::vec3(0, 1, 0));
+    glm::mat4 pitchRot = glm::rotate(glm::mat4(1.0f), -pitch, right);
+    fwd = glm::vec3(pitchRot * glm::vec4(fwd, 0.0f));
+
+    // Update target
+    target = position + fwd;
+  }
 };
 
 // =========================================================================
@@ -94,8 +120,8 @@ struct LODConfig {
 // =========================================================================
 class Renderer {
 public:
-  VulkanBackend backend;
-  Window *window;
+  VulkanBackend *backend = nullptr;
+  Window *window = nullptr;
   Camera camera;
   SceneUniforms sceneData;
 
@@ -125,8 +151,12 @@ public:
   uint32_t trianglesThisFrame = 0;
   uint32_t instancesThisFrame = 0;
 
-  bool Initialize(Window &window) {
-    if (!backend.Initialize(window)) {
+  bool Initialize(Window &win, VulkanBackend *backendPtr) {
+    window = &win;
+    backend = backendPtr;
+
+    if (!backend || !backend->initialized) {
+      std::cerr << "[Renderer] Backend not initialized!" << std::endl;
       return false;
     }
 
@@ -146,10 +176,11 @@ public:
   }
 
   uint32_t RegisterMesh(const UberMesh &mesh) {
-    if (!backend.initialized)
+    if (!backend || !backend->initialized)
       return 0xFFFFFFFF;
-    GPUMesh gpuMesh = backend.UploadMesh(mesh.baseVertices, mesh.indices);
+    GPUMesh gpuMesh = backend->UploadMesh(mesh.baseVertices, mesh.indices);
     gpuMeshes.push_back(gpuMesh);
+    meshRegistry.push_back(mesh); // Keep CPU copy for metadata
     return (uint32_t)gpuMeshes.size() - 1;
   }
 
@@ -195,11 +226,11 @@ public:
 
     // 1. Acquire swapchain image
     uint32_t imageIndex = 0;
-    if (!backend.BeginFrame(imageIndex))
+    if (!backend->BeginFrame(imageIndex))
       return;
 
     // Single pass for now (since we currently have one simplified RenderPass)
-    backend.BeginRenderPass(RenderPassType::GBuffer, imageIndex);
+    backend->BeginRenderPass(RenderPassType::GBuffer, imageIndex);
 
     RenderShadows();
     RenderGBuffer();
@@ -208,10 +239,10 @@ public:
     RenderPostProcess();
     RenderUI(imageIndex);
 
-    backend.EndRenderPass();
+    backend->EndRenderPass();
 
     // 8. Present
-    backend.EndFrame(imageIndex);
+    backend->EndFrame(imageIndex);
   }
 
   void SubmitEntity(const RenderObject &obj) { renderQueue.push_back(obj); }
@@ -223,20 +254,22 @@ public:
   }
 
   void Cleanup() {
-    backend.WaitIdle();
-    for (auto &mesh : gpuMeshes) {
-      backend.DestroyMesh(mesh);
+    if (backend) {
+      backend->WaitIdle();
+      for (auto &mesh : gpuMeshes) {
+        backend->DestroyMesh(mesh);
+      }
     }
     gpuMeshes.clear();
-    backend.Cleanup();
+    // Do not clean up backend here as we do not own it
   }
 
 private:
   void RenderShadows() { drawCallsThisFrame++; }
 
   void RenderGBuffer() {
-    backend.BindPipeline(backend.graphicsPipeline);
-    backend.BindTerrainTextures();
+    backend->BindPipeline(backend->graphicsPipeline);
+    backend->BindTerrainTextures();
 
     for (const auto &obj : renderQueue) {
       if (!obj.visible)
@@ -255,7 +288,8 @@ private:
       model.m = obj.worldTransform;
       Mesozoic::Math::Matrix4 mvp = vp * model;
 
-      // Push Constants (Model Matrix + Color + Time + CamPos + ModelPos)
+      // Push Constants (Model Matrix + Color + Time + CamPos + ModelPos +
+      // Morphs)
       struct PushData {
         Mesozoic::Math::Matrix4 mvp;
         std::array<float, 4> color;
@@ -263,28 +297,55 @@ private:
         float camX, camY, camZ;
         float modX, modY, modZ;
         float padding;
+        std::array<float, 4> morphWeights;
+        uint32_t vertexCount;
       } push;
       push.mvp = mvp;
       push.color = obj.color;
       push.time = sceneData.time;
-      push.camX = camera.position[0];
-      push.camY = camera.position[1];
-      push.camZ = camera.position[2];
+      push.camX = camera.position.x;
+      push.camY = camera.position.y;
+      push.camZ = camera.position.z;
       push.modX = obj.worldTransform[12];
       push.modY = obj.worldTransform[13];
       push.modZ = obj.worldTransform[14];
 
-      backend.PushConstants(backend.pipelineLayout,
-                            VK_SHADER_STAGE_VERTEX_BIT |
-                                VK_SHADER_STAGE_FRAGMENT_BIT,
-                            0, sizeof(PushData), &push);
+      // Default to 0
+      push.morphWeights = {0, 0, 0, 0};
+      push.vertexCount = 0;
+
+      // If object has morph weights, use them
+      if (!obj.morphWeights.empty()) {
+        for (size_t i = 0; i < obj.morphWeights.size() && i < 4; ++i) {
+          push.morphWeights[i] = obj.morphWeights[i];
+        }
+        // Assuming meshIndex corresponds to registered mesh, we need vertex
+        // count gpuMeshes doesn't store vertex count in easily accessible way?
+        // GPUMesh struct has indexCount. But we need VERTEX count for shader
+        // indexing? Wait, shader uses gl_VertexIndex. If we use separate buffer
+        // for deltas, we need to know the offset or assume 1:1 mapping. If we
+        // bind the buffer for THIS mesh, then offset is 0. But we bind ONE
+        // global buffer? No, plan is to use ONE buffer for Dino and bind it
+        // globally. Terrain renders with vertexCount=0, so shader skips
+        // morphing. Dino renders with vertexCount=DinoVerts. We need to know
+        // DinoVerts. gpuMeshes doesn't store it. meshRegistry stores UberMesh
+        // which has baseVertices.size().
+        if (obj.meshIndex < meshRegistry.size()) {
+          push.vertexCount =
+              (uint32_t)meshRegistry[obj.meshIndex].baseVertices.size();
+        }
+      }
+      backend->PushConstants(backend->pipelineLayout,
+                             VK_SHADER_STAGE_VERTEX_BIT |
+                                 VK_SHADER_STAGE_FRAGMENT_BIT,
+                             0, sizeof(PushData), &push);
 
       // Special check for grass instancing (flagged by alpha 0.5)
       if (abs(obj.color[3] - 0.5f) < 0.01f) {
-        backend.DrawMeshInstanced(gpuMeshes[obj.meshIndex], 800000);
+        backend->DrawMeshInstanced(gpuMeshes[obj.meshIndex], 800000);
         instancesThisFrame += 800000;
       } else {
-        backend.DrawMesh(gpuMeshes[obj.meshIndex]);
+        backend->DrawMesh(gpuMeshes[obj.meshIndex]);
         instancesThisFrame++;
       }
 
@@ -302,7 +363,7 @@ private:
 
   void RenderUI(uint32_t imageIndex) {
     if (uiSystem) {
-      VkCommandBuffer cmd = backend.GetCommandBuffer(imageIndex);
+      VkCommandBuffer cmd = backend->GetCommandBuffer(imageIndex);
       if (cmd) {
         uiSystem->EndFrame(cmd);
       }

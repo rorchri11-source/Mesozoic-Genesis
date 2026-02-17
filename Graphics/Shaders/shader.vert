@@ -6,11 +6,22 @@ layout(push_constant) uniform PushConstants {
     float time;
     vec3 cameraPos;
     vec3 modelPos;
+    // Morphing
+    vec4 morphWeights; // x=Snout, y=Bulk, z=Horn
+    uint vertexCount;
 } push;
+
+struct MorphDelta {
+    vec4 pos;
+    vec4 norm;
+};
 
 // New Texture Bindings (Set 0)
 layout(set = 0, binding = 0) uniform sampler2D heightMap;
 layout(set = 0, binding = 1) uniform sampler2D splatMap;
+layout(std430, set = 0, binding = 2) readonly buffer MorphDeltas {
+    MorphDelta deltas[];
+};
 
 layout(location = 0) in vec3 inPosition;
 layout(location = 1) in vec2 inUV;
@@ -97,6 +108,26 @@ void main() {
         float cr = cos(rot);
 
         vec3 lp = inPosition;
+
+        // Apply Morphing (if active)
+        if (push.vertexCount > 0) {
+            uint vid = gl_VertexIndex;
+            // Target Snout
+            if (push.morphWeights.x > 0.0) {
+                MorphDelta d = deltas[0 * push.vertexCount + vid];
+                lp += d.pos.xyz * push.morphWeights.x;
+            }
+            // Target Bulk
+            if (push.morphWeights.y > 0.0) {
+                MorphDelta d = deltas[1 * push.vertexCount + vid];
+                lp += d.pos.xyz * push.morphWeights.y;
+            }
+            // Target Horn
+            if (push.morphWeights.z > 0.0) {
+                MorphDelta d = deltas[2 * push.vertexCount + vid];
+                lp += d.pos.xyz * push.morphWeights.z;
+            }
+        }
         
         // Rotate around Y
         float rpx = lp.x * cr - lp.z * sr;
@@ -140,7 +171,35 @@ void main() {
     // ========================================
     // PATH C: EVERYTHING ELSE (Terrain, Dinos)
     // ========================================
-    vec3 worldPos = push.modelPos + inPosition;
+    vec3 morphedPos = inPosition;
+    vec3 morphedNorm = inNormal;
+
+    // Apply Morphing (Dinos)
+    if (push.vertexCount > 0) {
+        uint vid = gl_VertexIndex;
+        vec3 dP = vec3(0);
+        vec3 dN = vec3(0);
+
+        if (push.morphWeights.x > 0.0) {
+            MorphDelta d = deltas[0 * push.vertexCount + vid];
+            dP += d.pos.xyz * push.morphWeights.x;
+            dN += d.norm.xyz * push.morphWeights.x;
+        }
+        if (push.morphWeights.y > 0.0) {
+            MorphDelta d = deltas[1 * push.vertexCount + vid];
+            dP += d.pos.xyz * push.morphWeights.y;
+            dN += d.norm.xyz * push.morphWeights.y;
+        }
+        if (push.morphWeights.z > 0.0) {
+            MorphDelta d = deltas[2 * push.vertexCount + vid];
+            dP += d.pos.xyz * push.morphWeights.z;
+            dN += d.norm.xyz * push.morphWeights.z;
+        }
+        morphedPos += dP;
+        morphedNorm = normalize(morphedNorm + dN);
+    }
+
+    vec3 worldPos = push.modelPos + morphedPos;
     
     // Calculate UV for terrain based on worldPos if needed
     // But existing inUV is likely tiling UV. We need macro UV for splat map.
@@ -149,14 +208,14 @@ void main() {
     vec2 splatUV = (worldPos.xz + halfMap) / mapSize;
     // For non-terrain objects, this UV might be nonsense but harmless if unused.
     
-    gl_Position = push.renderMatrix * vec4(inPosition, 1.0); // Wait, previous code used inPosition for logic but worldPos for lighting?
+    gl_Position = push.renderMatrix * vec4(morphedPos, 1.0); // Wait, previous code used inPosition for logic but worldPos for lighting?
     // Correction: Standard Model rendering applies Model Matrix inside renderMatrix?
     // No, push.renderMatrix includes MVP. 
     // Usually MVP = Projection * View * Model.
     // So inPosition (local) is correct for gl_Position.
 
     fragColor = push.color;
-    fragNormal = inNormal;
+    fragNormal = morphedNorm;
     fragWorldPos = worldPos;
     fragTime = push.time;
     fragCameraPos = push.cameraPos;
