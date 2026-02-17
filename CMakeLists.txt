@@ -44,16 +44,28 @@ else()
     endif()
 endif()
 
+# ==================== GLM ====================
+include(FetchContent)
+FetchContent_Declare(
+    glm
+    GIT_REPOSITORY https://github.com/g-truc/glm.git
+    GIT_TAG        0.9.9.8
+    GIT_SHALLOW    TRUE
+)
+FetchContent_MakeAvailable(glm)
+
 # ==================== TESTS ====================
 set(TEST_SOURCES Tests/CoreTests.cpp)
 
 add_executable(MesozoicTests ${TEST_SOURCES})
+target_link_libraries(MesozoicTests PRIVATE glm::glm)
 target_include_directories(MesozoicTests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
 # ==================== GAME ====================
-set(GAME_SOURCES Game/Main.cpp Graphics/TerrainSystem.cpp)
+set(GAME_SOURCES Game/Main.cpp Graphics/TerrainSystem.cpp Graphics/UI/UISystem.cpp)
 
 add_executable(MesozoicGenesis ${GAME_SOURCES})
+target_link_libraries(MesozoicGenesis PRIVATE glm::glm)
 target_include_directories(MesozoicGenesis PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
 # Link optional dependencies

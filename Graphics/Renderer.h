@@ -131,8 +131,8 @@ struct LODConfig {
 // =========================================================================
 class Renderer {
 public:
-  VulkanBackend backend;
-  Window *window;
+  VulkanBackend* backend = nullptr;
+  Window *window = nullptr;
   Camera camera;
   SceneUniforms sceneData;
 
@@ -157,9 +157,13 @@ public:
   uint32_t trianglesThisFrame = 0;
   uint32_t instancesThisFrame = 0;
 
-  bool Initialize(Window &window) {
-    if (!backend.Initialize(window)) {
-      return false;
+  bool Initialize(Window &win, VulkanBackend* backendPtr) {
+    window = &win;
+    backend = backendPtr;
+
+    if (!backend || !backend->initialized) {
+        std::cerr << "[Renderer] Backend not initialized!" << std::endl;
+        return false;
     }
 
     // Setup default LOD config for dinosaurs
@@ -178,9 +182,9 @@ public:
   }
 
   uint32_t RegisterMesh(const UberMesh &mesh) {
-    if (!backend.initialized)
+    if (!backend || !backend->initialized)
       return 0xFFFFFFFF;
-    GPUMesh gpuMesh = backend.UploadMesh(mesh.baseVertices, mesh.indices);
+    GPUMesh gpuMesh = backend->UploadMesh(mesh.baseVertices, mesh.indices);
     gpuMeshes.push_back(gpuMesh);
     return (uint32_t)gpuMeshes.size() - 1;
   }
@@ -195,11 +199,11 @@ public:
 
     // 1. Acquire swapchain image
     uint32_t imageIndex = 0;
-    if (!backend.BeginFrame(imageIndex))
+    if (!backend->BeginFrame(imageIndex))
       return;
 
     // Single pass for now (since we currently have one simplified RenderPass)
-    backend.BeginRenderPass(RenderPassType::GBuffer, imageIndex);
+    backend->BeginRenderPass(RenderPassType::GBuffer, imageIndex);
 
     RenderShadows();
     RenderGBuffer();
@@ -208,10 +212,10 @@ public:
     RenderPostProcess();
     RenderUI(imageIndex);
 
-    backend.EndRenderPass();
+    backend->EndRenderPass();
 
     // 8. Present
-    backend.EndFrame(imageIndex);
+    backend->EndFrame(imageIndex);
   }
 
   void SubmitEntity(const RenderObject &obj) { renderQueue.push_back(obj); }
@@ -223,20 +227,22 @@ public:
   }
 
   void Cleanup() {
-    backend.WaitIdle();
-    for (auto &mesh : gpuMeshes) {
-      backend.DestroyMesh(mesh);
+    if (backend) {
+        backend->WaitIdle();
+        for (auto &mesh : gpuMeshes) {
+          backend->DestroyMesh(mesh);
+        }
     }
     gpuMeshes.clear();
-    backend.Cleanup();
+    // Do not clean up backend here as we do not own it
   }
 
 private:
   void RenderShadows() { drawCallsThisFrame++; }
 
   void RenderGBuffer() {
-    backend.BindPipeline(backend.graphicsPipeline);
-    backend.BindTerrainTextures();
+    backend->BindPipeline(backend->graphicsPipeline);
+    backend->BindTerrainTextures();
 
     for (const auto &obj : renderQueue) {
       if (!obj.visible)
@@ -274,17 +280,17 @@ private:
       push.modY = obj.worldTransform[13];
       push.modZ = obj.worldTransform[14];
 
-      backend.PushConstants(backend.pipelineLayout,
+      backend->PushConstants(backend->pipelineLayout,
                             VK_SHADER_STAGE_VERTEX_BIT |
                                 VK_SHADER_STAGE_FRAGMENT_BIT,
                             0, sizeof(PushData), &push);
 
       // Special check for grass instancing (flagged by alpha 0.5)
       if (abs(obj.color[3] - 0.5f) < 0.01f) {
-        backend.DrawMeshInstanced(gpuMeshes[obj.meshIndex], 800000);
+        backend->DrawMeshInstanced(gpuMeshes[obj.meshIndex], 800000);
         instancesThisFrame += 800000;
       } else {
-        backend.DrawMesh(gpuMeshes[obj.meshIndex]);
+        backend->DrawMesh(gpuMeshes[obj.meshIndex]);
         instancesThisFrame++;
       }
 
@@ -302,7 +308,7 @@ private:
 
   void RenderUI(uint32_t imageIndex) {
     if (uiSystem) {
-      VkCommandBuffer cmd = backend.GetCommandBuffer(imageIndex);
+      VkCommandBuffer cmd = backend->GetCommandBuffer(imageIndex);
       if (cmd) {
         uiSystem->EndFrame(cmd);
       }
