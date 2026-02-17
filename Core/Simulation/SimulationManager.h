@@ -8,6 +8,7 @@
 #include "EntityFactory.h"
 #include <algorithm>
 #include <cmath>
+#include <cstdint>
 #include <iostream>
 #include <vector>
 

@@ -6,6 +6,7 @@
 #include "../Graphics/UI/UISystem.h"
 #include "../Graphics/Window.h"
 #include <chrono>
+#include <cstdint>
 #include <iostream>
 #include <thread>
 #include <glm/glm.hpp> // Ensure GLM is included for vec3 math
