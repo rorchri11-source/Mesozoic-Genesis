@@ -175,10 +175,7 @@ void UISystem::EndFrame(VkCommandBuffer commandBuffer) {
 
   // Bind Pipeline (UI Pipeline)
   vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
-                    backend->graphicsPipeline);
-  // WARNING: Using 'graphicsPipeline' which we forced to be UI pipeline in
-  // VulkanBackend::CreateUIPipeline. In strict engine, we'd have a separate
-  // 'uiPipeline' member.
+                    backend->uiPipeline);
 
   // Bind Vertex Buffers
   VkBuffer vertexBuffers[] = {quadMesh.vertexBuffer.buffer};

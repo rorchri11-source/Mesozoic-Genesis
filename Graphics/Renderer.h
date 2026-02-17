@@ -11,6 +11,8 @@
 #include <iostream>
 #include <string>
 #include <vector>
+#include <glm/glm.hpp>
+#include <glm/gtc/matrix_transform.hpp>
 
 
 namespace Mesozoic {
@@ -50,6 +52,41 @@ struct Camera {
   // View-Projection matrix (would be computed with GLM or custom math)
   std::array<float, 16> viewMatrix;
   std::array<float, 16> projMatrix;
+
+  // Helper methods
+  glm::vec3 GetForward() const {
+    glm::vec3 p(position[0], position[1], position[2]);
+    glm::vec3 t(target[0], target[1], target[2]);
+    return glm::normalize(t - p);
+  }
+
+  glm::vec3 GetRight() const {
+    glm::vec3 f = GetForward();
+    glm::vec3 u(up[0], up[1], up[2]);
+    return glm::normalize(glm::cross(f, u));
+  }
+
+  glm::vec3 GetUp() const {
+    return glm::cross(GetRight(), GetForward());
+  }
+
+  void Rotate(float yaw, float pitch) {
+    glm::vec3 fwd = GetForward();
+
+    // Rotate around world up (0,1,0) for yaw
+    glm::mat4 yawRot = glm::rotate(glm::mat4(1.0f), -yaw, glm::vec3(0, 1, 0));
+    fwd = glm::vec3(yawRot * glm::vec4(fwd, 0.0f));
+
+    // Rotate around right vector for pitch
+    glm::vec3 right = glm::cross(fwd, glm::vec3(0, 1, 0));
+    glm::mat4 pitchRot = glm::rotate(glm::mat4(1.0f), -pitch, right);
+    fwd = glm::vec3(pitchRot * glm::vec4(fwd, 0.0f));
+
+    // Update target
+    glm::vec3 p(position[0], position[1], position[2]);
+    glm::vec3 newTarget = p + fwd;
+    target = {newTarget.x, newTarget.y, newTarget.z};
+  }
 };
 
 // =========================================================================
