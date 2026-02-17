@@ -192,13 +192,11 @@ int main() {
       glm::vec3 fwd = renderer.camera.GetForward();
       glm::vec3 right = renderer.camera.GetRight();
 
-      // Fix array vs vec3 math
-      glm::vec3 pos(renderer.camera.position[0], renderer.camera.position[1], renderer.camera.position[2]);
-      if (window.IsKeyPressed('W')) pos += fwd * moveSpeed;
-      if (window.IsKeyPressed('S')) pos -= fwd * moveSpeed;
-      if (window.IsKeyPressed('D')) pos += right * moveSpeed;
-      if (window.IsKeyPressed('A')) pos -= right * moveSpeed;
-      renderer.camera.position = {pos.x, pos.y, pos.z};
+      // Unified vec3 math
+      if (window.IsKeyPressed('W')) renderer.camera.position += fwd * moveSpeed;
+      if (window.IsKeyPressed('S')) renderer.camera.position -= fwd * moveSpeed;
+      if (window.IsKeyPressed('D')) renderer.camera.position += right * moveSpeed;
+      if (window.IsKeyPressed('A')) renderer.camera.position -= right * moveSpeed;
 
       if (!editorMode) {
         float dx, dy;
@@ -206,10 +204,10 @@ int main() {
         renderer.camera.Rotate(dx * 0.1f, dy * 0.1f);
       }
 
-      float h = terrainSystem.GetHeight(renderer.camera.position[0],
-                                        renderer.camera.position[2]);
-      if (renderer.camera.position[1] < h + 2.0f)
-        renderer.camera.position[1] = h + 2.0f;
+      float h = terrainSystem.GetHeight(renderer.camera.position.x,
+                                        renderer.camera.position.z);
+      if (renderer.camera.position.y < h + 2.0f)
+        renderer.camera.position.y = h + 2.0f;
 
       // --- EDITOR LOGIC ---
       if (editorMode) {
@@ -237,8 +235,8 @@ int main() {
 
         Vec3 hitPos;
         if (terrainSystem.Raycast(
-                Vec3(renderer.camera.position[0], renderer.camera.position[1],
-                     renderer.camera.position[2]),
+                Vec3(renderer.camera.position.x, renderer.camera.position.y,
+                     renderer.camera.position.z),
                 rayDir, hitPos)) {
           if (window.IsMouseButtonDown(Window::MOUSE_LEFT)) {
             terrainSystem.Paint(hitPos.x, hitPos.z, brushRadius, brushType);
@@ -248,9 +246,9 @@ int main() {
 
       // --- RENDER SUBMISSION ---
       Matrix4 skyModel = Matrix4::Identity();
-      skyModel.m[12] = renderer.camera.position[0];
-      skyModel.m[13] = renderer.camera.position[1];
-      skyModel.m[14] = renderer.camera.position[2];
+      skyModel.m[12] = renderer.camera.position.x;
+      skyModel.m[13] = renderer.camera.position.y;
+      skyModel.m[14] = renderer.camera.position.z;
       renderer.SubmitEntity({.entityId = 99998,
                              .meshIndex = skyMeshId,
                              .worldTransform = skyModel.m,
@@ -328,8 +326,8 @@ int main() {
 
     renderer.camera.aspectRatio = (float)config.width / (float)config.height;
 
-    Vec3 camPos(renderer.camera.position[0], renderer.camera.position[1],
-                renderer.camera.position[2]);
+    Vec3 camPos(renderer.camera.position.x, renderer.camera.position.y,
+                renderer.camera.position.z);
     Vec3 camFwd(renderer.camera.GetForward().x, renderer.camera.GetForward().y, renderer.camera.GetForward().z);
 
     renderer.camera.viewMatrix =
