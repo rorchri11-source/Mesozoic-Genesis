@@ -7,6 +7,24 @@ namespace Graphics {
 TerrainSystem::TerrainSystem(int w, int d, float s, float mh)
     : width(w), depth(d), scale(s), maxHeight(mh) {}
 
+void TerrainSystem::Initialize(VulkanBackend *backend) {
+  this->backend = backend;
+  Bake();
+
+  // Upload HeightMap
+  heightTex = backend->CreateTextureFromBuffer(
+      heightMap.data(), heightMap.size() * sizeof(float), width, depth,
+      VK_FORMAT_R32_SFLOAT);
+
+  // Upload SplatMap
+  splatTex = backend->CreateTextureFromBuffer(
+      splatMap.data(), splatMap.size(), width, depth,
+      VK_FORMAT_R8G8B8A8_UNORM); // Ensure UNORM for correct color/weight interpretation
+
+  // Update Global Terrain Descriptors
+  backend->UpdateDescriptorSets(heightTex, splatTex);
+}
+
 void TerrainSystem::Bake() {
   std::cout << "[TerrainSystem] Baking HeightMap..." << std::endl;
   BakeHeightMap();

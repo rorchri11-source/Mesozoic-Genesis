@@ -145,6 +145,7 @@ public:
       return 0xFFFFFFFF;
     GPUMesh gpuMesh = backend.UploadMesh(mesh.baseVertices, mesh.indices);
     gpuMeshes.push_back(gpuMesh);
+    meshRegistry.push_back(mesh); // Keep CPU copy for metadata
     return (uint32_t)gpuMeshes.size() - 1;
   }
 
@@ -218,7 +219,7 @@ private:
       model.m = obj.worldTransform;
       Mesozoic::Math::Matrix4 mvp = vp * model;
 
-      // Push Constants (Model Matrix + Color + Time + CamPos + ModelPos)
+      // Push Constants (Model Matrix + Color + Time + CamPos + ModelPos + Morphs)
       struct PushData {
         Mesozoic::Math::Matrix4 mvp;
         std::array<float, 4> color;
@@ -226,6 +227,8 @@ private:
         float camX, camY, camZ;
         float modX, modY, modZ;
         float padding;
+        std::array<float, 4> morphWeights;
+        uint32_t vertexCount;
       } push;
       push.mvp = mvp;
       push.color = obj.color;
@@ -236,6 +239,32 @@ private:
       push.modX = obj.worldTransform[12];
       push.modY = obj.worldTransform[13];
       push.modZ = obj.worldTransform[14];
+
+      // Default to 0
+      push.morphWeights = {0,0,0,0};
+      push.vertexCount = 0;
+
+      // If object has morph weights, use them
+      if (!obj.morphWeights.empty()) {
+        for(size_t i=0; i<obj.morphWeights.size() && i<4; ++i) {
+            push.morphWeights[i] = obj.morphWeights[i];
+        }
+        // Assuming meshIndex corresponds to registered mesh, we need vertex count
+        // gpuMeshes doesn't store vertex count in easily accessible way?
+        // GPUMesh struct has indexCount. But we need VERTEX count for shader indexing?
+        // Wait, shader uses gl_VertexIndex.
+        // If we use separate buffer for deltas, we need to know the offset or assume 1:1 mapping.
+        // If we bind the buffer for THIS mesh, then offset is 0.
+        // But we bind ONE global buffer?
+        // No, plan is to use ONE buffer for Dino and bind it globally.
+        // Terrain renders with vertexCount=0, so shader skips morphing.
+        // Dino renders with vertexCount=DinoVerts.
+        // We need to know DinoVerts.
+        // gpuMeshes doesn't store it. meshRegistry stores UberMesh which has baseVertices.size().
+        if (obj.meshIndex < meshRegistry.size()) {
+             push.vertexCount = (uint32_t)meshRegistry[obj.meshIndex].baseVertices.size();
+        }
+      }
 
       backend.PushConstants(backend.pipelineLayout,
                             VK_SHADER_STAGE_VERTEX_BIT |

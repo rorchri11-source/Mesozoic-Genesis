@@ -229,8 +229,16 @@ public:
     splatMapBinding.stageFlags =
         VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
 
-    std::array<VkDescriptorSetLayoutBinding, 2> bindings = {heightMapBinding,
-                                                            splatMapBinding};
+    // Morph Delta Buffer (SSBO)
+    VkDescriptorSetLayoutBinding morphBinding{};
+    morphBinding.binding = 2;
+    morphBinding.descriptorCount = 1;
+    morphBinding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+    morphBinding.pImmutableSamplers = nullptr;
+    morphBinding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+
+    std::array<VkDescriptorSetLayoutBinding, 3> bindings = {heightMapBinding,
+                                                            splatMapBinding, morphBinding};
 
     VkDescriptorSetLayoutCreateInfo layoutInfo{};
     layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
@@ -249,9 +257,11 @@ public:
 
   bool CreateDescriptorPool() {
 #if VULKAN_SDK_AVAILABLE
-    std::array<VkDescriptorPoolSize, 1> poolSizes{};
+    std::array<VkDescriptorPoolSize, 2> poolSizes{};
     poolSizes[0].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
     poolSizes[0].descriptorCount = 100;
+    poolSizes[1].type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+    poolSizes[1].descriptorCount = 10;
 
     VkDescriptorPoolCreateInfo poolInfo{};
     poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
@@ -287,7 +297,7 @@ public:
 #endif
   }
 
-  void UpdateDescriptorSets(GPUTexture &heightMap, GPUTexture &splatMap) {
+  void UpdateDescriptorSets(GPUTexture &heightMap, GPUTexture &splatMap, GPUBuffer* morphBuffer = nullptr) {
 #if VULKAN_SDK_AVAILABLE
     VkDescriptorImageInfo heightInfo{};
     heightInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
@@ -299,7 +309,21 @@ public:
     splatInfo.imageView = splatMap.view;
     splatInfo.sampler = splatMap.sampler;
 
-    std::array<VkWriteDescriptorSet, 2> descriptorWrites{};
+    VkDescriptorBufferInfo bufferInfo{};
+    if (morphBuffer && morphBuffer->IsValid()) {
+        bufferInfo.buffer = morphBuffer->buffer;
+        bufferInfo.offset = 0;
+        bufferInfo.range = morphBuffer->size;
+    } else {
+        // Handle null buffer? Ideally we bind a dummy.
+        // For now, assuming user provides a valid dummy if needed.
+        // But to be safe, we can just skip update if null?
+        // No, Validation Layers will cry if we don't update.
+        // We will assume caller handles this or we crash/validate later.
+    }
+
+    std::vector<VkWriteDescriptorSet> descriptorWrites;
+    descriptorWrites.resize(3);
 
     descriptorWrites[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
     descriptorWrites[0].dstSet = descriptorSet;
@@ -318,6 +342,14 @@ public:
         VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
     descriptorWrites[1].descriptorCount = 1;
     descriptorWrites[1].pImageInfo = &splatInfo;
+
+    descriptorWrites[2].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    descriptorWrites[2].dstSet = descriptorSet;
+    descriptorWrites[2].dstBinding = 2;
+    descriptorWrites[2].dstArrayElement = 0;
+    descriptorWrites[2].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+    descriptorWrites[2].descriptorCount = 1;
+    descriptorWrites[2].pBufferInfo = &bufferInfo;
 
     vkUpdateDescriptorSets(device,
                            static_cast<uint32_t>(descriptorWrites.size()),

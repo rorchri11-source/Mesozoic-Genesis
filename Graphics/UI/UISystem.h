@@ -46,6 +46,10 @@ public:
                   glm::vec4 color = {1, 1, 1, 1},
                   glm::vec4 hoverColor = {0.8, 0.8, 0.8, 1});
 
+  bool DrawSlider(float x, float y, float w, float h, float &value, GPUTexture &texture,
+                  glm::vec4 color = {0.5, 0.5, 0.5, 1},
+                  glm::vec4 knobColor = {1, 1, 1, 1});
+
   // Helper to get screen size
   float GetScreenWidth() const { return (float)window->config.width; }
   float GetScreenHeight() const { return (float)window->config.height; }

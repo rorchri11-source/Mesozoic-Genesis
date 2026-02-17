@@ -135,6 +135,39 @@ bool UISystem::DrawButton(float x, float y, float w, float h,
   return hover && down;
 }
 
+bool UISystem::DrawSlider(float x, float y, float w, float h, float &value,
+                          GPUTexture &texture, glm::vec4 color,
+                          glm::vec4 knobColor) {
+  float mx, my;
+  window->GetMousePosition(mx, my);
+
+  // Background
+  DrawImage(x, y, w, h, texture, color);
+
+  bool hover = (mx >= x && mx <= x + w && my >= y && my <= y + h);
+  bool down = window->IsMouseButtonDown(Window::MOUSE_LEFT);
+  bool changed = false;
+
+  if (hover && down) {
+    float newVal = (mx - x) / w;
+    if (newVal < 0)
+      newVal = 0;
+    if (newVal > 1)
+      newVal = 1;
+    if (std::abs(newVal - value) > 0.001f) {
+      value = newVal;
+      changed = true;
+    }
+  }
+
+  // Knob
+  float knobW = 10.0f;
+  float kx = x + value * (w - knobW);
+  DrawImage(kx, y, knobW, h, texture, knobColor);
+
+  return changed;
+}
+
 void UISystem::EndFrame(VkCommandBuffer commandBuffer) {
 #if VULKAN_SDK_AVAILABLE
   if (drawList.empty())

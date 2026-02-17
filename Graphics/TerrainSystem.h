@@ -1,5 +1,6 @@
 #pragma once
 #include "../Core/Math/Vec3.h"
+#include "VulkanBackend.h"
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
@@ -23,8 +24,17 @@ public:
   std::vector<float> heightMap;  // R32F
   std::vector<uint8_t> splatMap; // RGBA8
 
+  // GPU Data
+  VulkanBackend* backend = nullptr;
+  GPUTexture heightTex;
+  GPUTexture splatTex;
+
   // Constructor
+  TerrainSystem() : width(512), depth(512), scale(3.0f), maxHeight(100.0f) {}
   TerrainSystem(int width, int depth, float scale, float maxHeight);
+
+  // Initialization & GPU Upload
+  void Initialize(VulkanBackend* backend);
 
   // Core Funcs
   void Bake();

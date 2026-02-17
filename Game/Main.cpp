@@ -1,4 +1,5 @@
 #include "../AssetLoaders/GLTFLoader.h" // Fixed include path based on file structure
+#include "../Assets/MorphTargetExtractor.h" // For Dino DNA
 #include "../Core/Simulation/SimulationManager.h"
 #include "../Graphics/Renderer.h"
 #include "../Graphics/TerrainSystem.h"
@@ -6,6 +7,7 @@
 #include "../Graphics/UI/UISystem.h"
 #include "../Graphics/Window.h"
 #include <chrono>
+#include <cstring>
 #include <iostream>
 #include <thread> // For sleep
 
@@ -127,10 +129,85 @@ int main() {
     Vertex vert;
     vert.position = {v.position.x, v.position.y, v.position.z};
     vert.normal = {v.normal.x, v.normal.y, v.normal.z};
+    vert.uv = {v.uv[0], v.uv[1]};
     grassMesh.baseVertices.push_back(vert);
   }
   grassMesh.indices = grassGltf.primitives[0].indices;
   uint32_t grassMeshId = renderer.RegisterMesh(grassMesh);
+
+  // --- MORPH SYSTEM SETUP ---
+  // Generate Procedural Morphs for Dino
+  auto morphSet = Assets::MorphTargetExtractor::GenerateDinosaurMorphs(gltfDino);
+
+  // Flatten for GPU (Target_Snout, Target_Bulk, Target_Horn)
+  struct ShaderMorphDelta {
+      float p[4];
+      float n[4];
+  };
+  std::vector<ShaderMorphDelta> morphData;
+  size_t dinoVertCount = dinoMesh.baseVertices.size();
+  // We allocate space for 3 targets * vertexCount
+  morphData.resize(dinoVertCount * 3);
+
+  // Helper to copy
+  auto CopyTargetToBuffer = [&](const std::string& name, int targetIndex) {
+      for(const auto& t : morphSet.targets) {
+          if(t.name == name) {
+              for(size_t i=0; i<dinoVertCount && i<t.positionDeltas.size(); ++i) {
+                  size_t dstIdx = targetIndex * dinoVertCount + i;
+                  morphData[dstIdx].p[0] = t.positionDeltas[i].x;
+                  morphData[dstIdx].p[1] = t.positionDeltas[i].y;
+                  morphData[dstIdx].p[2] = t.positionDeltas[i].z;
+                  morphData[dstIdx].p[3] = 0.0f; // Padding
+
+                  if (i < t.normalDeltas.size()) {
+                    morphData[dstIdx].n[0] = t.normalDeltas[i].x;
+                    morphData[dstIdx].n[1] = t.normalDeltas[i].y;
+                    morphData[dstIdx].n[2] = t.normalDeltas[i].z;
+                    morphData[dstIdx].n[3] = 0.0f;
+                  }
+              }
+              std::cout << "[Main] Bound Morph Target: " << name << " to index " << targetIndex << std::endl;
+              return;
+          }
+      }
+      std::cerr << "[Main] Warning: Morph Target '" << name << "' not found!" << std::endl;
+  };
+
+  CopyTargetToBuffer("Target_Snout", 0);
+  CopyTargetToBuffer("Target_Bulk", 1);
+  CopyTargetToBuffer("Target_Horn", 2);
+
+  // Upload to SSBO
+  GPUBuffer morphBuffer = backend.CreateBuffer(
+      morphData.size() * sizeof(ShaderMorphDelta),
+      VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+      VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT
+  );
+
+  // Staging upload (using a temp staging buffer manually or helper?)
+  // VulkanBackend::CreateBuffer creates DEVICE_LOCAL but doesn't upload.
+  // VulkanBackend::UploadMesh uses staging.
+  // We need to implement manual staging upload or add helper.
+  // Or just use HOST_VISIBLE for simplicity?
+  // Let's use HOST_VISIBLE for prototype simplicity.
+  backend.DestroyBuffer(morphBuffer); // Re-create as host visible
+  morphBuffer = backend.CreateBuffer(
+      morphData.size() * sizeof(ShaderMorphDelta),
+      VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
+      VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT
+  );
+  if (morphBuffer.mapped) {
+      memcpy(morphBuffer.mapped, morphData.data(), morphData.size() * sizeof(ShaderMorphDelta));
+  }
+
+  // Update Global Descriptors (Terrain + Morph)
+  backend.UpdateDescriptorSets(terrainSystem.heightTex, terrainSystem.splatTex, &morphBuffer);
+
+  // Morph Weights UI State
+  float wSnout = 0.0f;
+  float wBulk = 0.0f;
+  float wHorn = 0.0f;
 
   // --- MAIN LOOP ---
   GameState currentState = GameState::MENU;
@@ -281,6 +358,10 @@ int main() {
         obj.color = (dino.species == Species::TRex)
                         ? std::array<float, 4>{0.8f, 0.3f, 0.2f, 1}
                         : std::array<float, 4>{0.2f, 0.7f, 0.3f, 1};
+
+        // Apply Morph Weights
+        obj.morphWeights = {wSnout, wBulk, wHorn, 0.0f};
+
         renderer.SubmitEntity(obj);
       }
 
@@ -303,6 +384,53 @@ int main() {
               whiteTex, {0.6f, 0.6f, 1.0f, 1.0f}, {0.8f, 0.8f, 1.0f, 1.0f})) {
         std::cout << "[Game] Editor Toggle Clicked" << std::endl;
       }
+
+      // Morph Sliders Panel (Bottom Right)
+      float panelW = 250;
+      float panelH = 180;
+      float panelX = uiSystem.GetScreenWidth() - panelW - 10;
+      float panelY = uiSystem.GetScreenHeight() - panelH - 10;
+
+      // Background
+      uiSystem.DrawImage(panelX, panelY, panelW, panelH, whiteTex, {0.0f, 0.0f, 0.0f, 0.5f});
+
+      // Sliders
+      float sliderX = panelX + 10;
+      float sliderY = panelY + 10;
+      float sliderW = panelW - 20;
+      float sliderH = 20;
+      float gap = 30;
+
+      // Snout
+      if (uiSystem.DrawSlider(sliderX, sliderY, sliderW, sliderH, wSnout, whiteTex, {0.5, 0.2, 0.2, 1}, {1, 0.5, 0.5, 1})) {
+         // Changed
+      }
+      // Bulk
+      if (uiSystem.DrawSlider(sliderX, sliderY + gap, sliderW, sliderH, wBulk, whiteTex, {0.2, 0.5, 0.2, 1}, {0.5, 1, 0.5, 1})) {
+         // Changed
+      }
+      // Horn
+      if (uiSystem.DrawSlider(sliderX, sliderY + gap*2, sliderW, sliderH, wHorn, whiteTex, {0.2, 0.2, 0.5, 1}, {0.5, 0.5, 1, 1})) {
+         // Changed
+      }
+
+      // Update Dino Weights (Assume first entity is our Hero Dino for test)
+      // Actually we iterate all dinos, let's update them all or find one.
+      // For simplicity, update all rendered dinos in the loop above?
+      // No, we need to update BEFORE submission or modify renderQueue logic.
+      // RenderQueue is populated in step 3.
+      // We are at step 4 (UI).
+      // So UI draws ON TOP, but logic should run before.
+      // But UI returns `changed` now.
+      // It's fine, next frame will pick up changes.
+      // OR we update `sim` entities.
+      // `sim.entities` logic is in `sim.Tick`.
+      // We don't have "morphWeights" in `Dinosaur` struct in `SimulationManager`.
+      // But `RenderObject` has it.
+      // We construct `RenderObject` in step 3 of loop.
+      // So we should update `wSnout` etc BEFORE step 3?
+      // UI is immediate mode, so we draw it here. The values `wSnout` persist.
+      // So next frame step 3 will use updated values.
     }
 
     // Common: Setup Camera Matrices
