@@ -1,5 +1,6 @@
 #pragma once
 #include "../Core/Math/Vec3.h"
+#include "VulkanBackend.h" // Needed for GPUTexture and backend pointer
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
@@ -13,6 +14,8 @@ namespace Graphics {
 
 class TerrainSystem {
 public:
+  VulkanBackend *backend = nullptr;
+
   // Config
   int width;
   int depth;
@@ -23,13 +26,24 @@ public:
   std::vector<float> heightMap;  // R32F
   std::vector<uint8_t> splatMap; // RGBA8
 
+  // GPU Data
+  GPUTexture heightMapTexture;
+  GPUTexture splatMapTexture;
+
   // Constructor
+  TerrainSystem() : width(512), depth(512), scale(1.0f), maxHeight(50.0f) {}
   TerrainSystem(int width, int depth, float scale, float maxHeight);
+
+  void Initialize(VulkanBackend *backend);
 
   // Core Funcs
   void Bake();
   float GetHeight(float x, float z) const;
   Vec3 GetNormal(float x, float z) const;
+
+  // Editor Funcs
+  bool Raycast(Vec3 origin, Vec3 dir, Vec3 &hitPos);
+  void Paint(float x, float z, float radius, int type); // type: 0=Grass, 1=Dirt, 2=Rock
 
   // Helper: Texture Dimensions
   int GetTextureWidth() const { return width; }
@@ -38,6 +52,7 @@ public:
 private:
   void BakeHeightMap();
   void BakeSplatMap();
+  void CreateTerrainTextures();
 
   // Internal Noise Helpers (Private Implementation)
   static float Hash(float n);
