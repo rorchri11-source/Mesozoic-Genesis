@@ -41,9 +41,9 @@ struct RenderObject {
 // Camera
 // =========================================================================
 struct Camera {
-  std::array<float, 3> position = {0, 50, -100};
-  std::array<float, 3> target = {0, 0, 0};
-  std::array<float, 3> up = {0, 1, 0};
+  glm::vec3 position = {0, 50, -100};
+  glm::vec3 target = {0, 0, 0};
+  glm::vec3 up = {0, 1, 0};
   float fov = 60.0f; // degrees
   float nearPlane = 0.1f;
   float farPlane = 5000.0f;
@@ -55,15 +55,11 @@ struct Camera {
 
   // Helper methods
   glm::vec3 GetForward() const {
-    glm::vec3 p(position[0], position[1], position[2]);
-    glm::vec3 t(target[0], target[1], target[2]);
-    return glm::normalize(t - p);
+    return glm::normalize(target - position);
   }
 
   glm::vec3 GetRight() const {
-    glm::vec3 f = GetForward();
-    glm::vec3 u(up[0], up[1], up[2]);
-    return glm::normalize(glm::cross(f, u));
+    return glm::normalize(glm::cross(GetForward(), up));
   }
 
   glm::vec3 GetUp() const {
@@ -83,9 +79,7 @@ struct Camera {
     fwd = glm::vec3(pitchRot * glm::vec4(fwd, 0.0f));
 
     // Update target
-    glm::vec3 p(position[0], position[1], position[2]);
-    glm::vec3 newTarget = p + fwd;
-    target = {newTarget.x, newTarget.y, newTarget.z};
+    target = position + fwd;
   }
 };
 
@@ -267,9 +261,9 @@ private:
       push.mvp = mvp;
       push.color = obj.color;
       push.time = sceneData.time;
-      push.camX = camera.position[0];
-      push.camY = camera.position[1];
-      push.camZ = camera.position[2];
+      push.camX = camera.position.x;
+      push.camY = camera.position.y;
+      push.camZ = camera.position.z;
       push.modX = obj.worldTransform[12];
       push.modY = obj.worldTransform[13];
       push.modZ = obj.worldTransform[14];
