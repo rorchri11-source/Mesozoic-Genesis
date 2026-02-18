@@ -79,6 +79,8 @@ public:
     uint16_t indexInChunk = chunk->header.count;
     chunk->header.count++;
 
+    chunk->entityIds.push_back(id);
+
     // Record location
     entityLocations[id].archetypeId = archetypeId;
     entityLocations[id].chunkIndex = chunkIdx;
@@ -111,17 +113,14 @@ public:
       }
 
       // Find the entity that was in lastIndex and update its location
-      for (EntityID i = 0; i < MAX_ENTITIES; ++i) {
-        if (entityLocations[i].valid &&
-            entityLocations[i].archetypeId == loc.archetypeId &&
-            entityLocations[i].chunkIndex == loc.chunkIndex &&
-            entityLocations[i].indexInChunk == lastIndex) {
-          entityLocations[i].indexInChunk = loc.indexInChunk;
-          break;
-        }
-      }
+      // Optimized O(1) lookup using entityIds vector in MemoryChunk
+      EntityID movedEntity = chunk->entityIds[lastIndex];
+      entityLocations[movedEntity].indexInChunk = loc.indexInChunk;
+
+      chunk->entityIds[loc.indexInChunk] = movedEntity;
     }
 
+    chunk->entityIds.pop_back();
     chunk->header.count--;
     loc.valid = false;
     availableEntities.push(entity);
