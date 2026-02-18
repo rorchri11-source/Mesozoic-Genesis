@@ -20,15 +20,17 @@ namespace ECS {
 
     struct MemoryChunk {
         ChunkHeader header;
+        std::vector<uint32_t> entityIds;
         // Raw byte array for component data.
         // Data is laid out as Structure of Arrays (SoA) within the chunk
         // based on the Archetype's component strides.
-        uint8_t data[CHUNK_SIZE - sizeof(ChunkHeader)];
+        uint8_t data[CHUNK_SIZE - sizeof(ChunkHeader) - sizeof(std::vector<uint32_t>)];
 
         MemoryChunk(uint32_t archId, uint16_t cap) {
             header.archetypeId = archId;
             header.count = 0;
             header.capacity = cap;
+            entityIds.reserve(cap);
         }
     };
 
