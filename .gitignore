@@ -2,6 +2,9 @@
 build/
 bin/
 out/
+_deps/
+MesozoicGenesis
+MesozoicTests
 
 # CMake
 CMakeCache.txt

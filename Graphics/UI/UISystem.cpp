@@ -8,6 +8,8 @@ namespace Graphics {
 void UISystem::Initialize(VulkanBackend *backend, Window *window) {
   this->backend = backend;
   this->window = window;
+  this->wasMouseLeftDown = false;
+  this->isMouseJustPressed = false;
   CreateQuadMesh();
 }
 
@@ -37,6 +39,11 @@ void UISystem::CreateQuadMesh() {
 
 void UISystem::BeginFrame() {
   drawList.clear();
+
+  // Update Mouse State
+  bool currentDown = window->IsMouseButtonDown(Window::MOUSE_LEFT);
+  isMouseJustPressed = currentDown && !wasMouseLeftDown;
+  wasMouseLeftDown = currentDown;
 
   // Update Projection (Ortho 0..W, 0..H)
   float w = (float)window->config.width;
@@ -74,9 +81,18 @@ bool UISystem::DrawButton(float x, float y, float w, float h,
   bool hover = (mx >= x && mx <= x + w && my >= y && my <= y + h);
   bool down = window->IsMouseButtonDown(Window::MOUSE_LEFT);
 
-  DrawImage(x, y, w, h, texture, hover ? hoverColor : color);
+  glm::vec4 drawColor = color;
+  if (hover) {
+    if (down) {
+      drawColor = hoverColor * 0.9f;
+      drawColor.a = hoverColor.a; // Maintain alpha
+    } else {
+      drawColor = hoverColor;
+    }
+  }
+  DrawImage(x, y, w, h, texture, drawColor);
 
-  return hover && down;
+  return hover && isMouseJustPressed;
 }
 
 bool UISystem::DrawSlider(float x, float y, float w, float h, float &value,

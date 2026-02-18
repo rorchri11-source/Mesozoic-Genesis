@@ -55,6 +55,9 @@ public:
   float GetScreenHeight() const { return (float)window->config.height; }
 
 private:
+  bool wasMouseLeftDown;
+  bool isMouseJustPressed;
+
   void CreateQuadMesh();
 };
 
