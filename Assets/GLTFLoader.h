@@ -1,10 +1,12 @@
 #pragma once
 #include "../Core/Math/Vec3.h"
+#include <charconv>
 #include <cstdint>
 #include <fstream>
 #include <iostream>
 #include <sstream>
 #include <string>
+#include <system_error>
 #include <unordered_map>
 #include <vector>
 
@@ -178,21 +180,28 @@ private:
     Value v;
     v.type = Type::Number;
     size_t start = pos;
-    if (pos < s.size() && s[pos] == '-')
+    // Skip optional sign
+    if (pos < s.size() && (s[pos] == '-' || s[pos] == '+'))
       pos++;
     while (pos < s.size() &&
            (std::isdigit(s[pos]) || s[pos] == '.' || s[pos] == 'e' ||
             s[pos] == 'E' || s[pos] == '+' || s[pos] == '-'))
       pos++;
 
-    std::string numStr = s.substr(start, pos - start);
-    try {
-      if (!numStr.empty()) {
-        v.number = std::stod(numStr);
-      } else {
+    if (start < pos) {
+      const char *begin = s.data() + start;
+      const char *end = s.data() + pos;
+
+      // Optimization: Use std::from_chars to avoid string allocation.
+      // std::from_chars is faster than std::stod but stricter (no leading +).
+      if (*begin == '+')
+        begin++;
+
+      auto res = std::from_chars(begin, end, v.number);
+      if (res.ec != std::errc()) {
         v.number = 0.0;
       }
-    } catch (...) {
+    } else {
       v.number = 0.0;
     }
     return v;
