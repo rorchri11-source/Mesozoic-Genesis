@@ -129,7 +129,7 @@ public:
 
   static Value Parse(const std::string &json) {
     size_t pos = 0;
-    return ParseValue(json, pos);
+    return ParseValue(json, pos, 0);
   }
 
 private:
@@ -139,7 +139,11 @@ private:
       pos++;
   }
 
-  static Value ParseValue(const std::string &s, size_t &pos) {
+  static Value ParseValue(const std::string &s, size_t &pos, int depth) {
+    if (depth > 256) {
+      return {};
+    }
+
     SkipWhitespace(s, pos);
     if (pos >= s.size())
       return {};
@@ -148,9 +152,9 @@ private:
     if (c == '"')
       return ParseString(s, pos);
     if (c == '{')
-      return ParseObject(s, pos);
+      return ParseObject(s, pos, depth + 1);
     if (c == '[')
-      return ParseArray(s, pos);
+      return ParseArray(s, pos, depth + 1);
     if (c == 't' || c == 'f')
       return ParseBool(s, pos);
     if (c == 'n') {
@@ -211,13 +215,13 @@ private:
     return v;
   }
 
-  static Value ParseArray(const std::string &s, size_t &pos) {
+  static Value ParseArray(const std::string &s, size_t &pos, int depth) {
     Value v;
     v.type = Type::Array;
     pos++; // skip [
     SkipWhitespace(s, pos);
     while (pos < s.size() && s[pos] != ']') {
-      v.array.push_back(ParseValue(s, pos));
+      v.array.push_back(ParseValue(s, pos, depth));
       SkipWhitespace(s, pos);
       if (pos < s.size() && s[pos] == ',')
         pos++;
@@ -227,7 +231,7 @@ private:
     return v;
   }
 
-  static Value ParseObject(const std::string &s, size_t &pos) {
+  static Value ParseObject(const std::string &s, size_t &pos, int depth) {
     Value v;
     v.type = Type::Object;
     pos++; // skip {
@@ -236,7 +240,7 @@ private:
       Value key = ParseString(s, pos);
       SkipWhitespace(s, pos);
       pos++; // skip :
-      v.object[key.str] = ParseValue(s, pos);
+      v.object[key.str] = ParseValue(s, pos, depth);
       SkipWhitespace(s, pos);
       if (pos < s.size() && s[pos] == ',')
         pos++;
