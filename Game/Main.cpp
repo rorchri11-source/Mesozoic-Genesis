@@ -252,21 +252,24 @@ int main() {
 
       if (uiSystem.DrawButton(centerX, centerY, btnW, btnH, whiteTex,
                               {0.2f, 0.7f, 0.3f, 1.0f},
-                              {0.3f, 0.9f, 0.4f, 1.0f})) {
+                              {0.3f, 0.9f, 0.4f, 1.0f},
+                              {0.15f, 0.5f, 0.25f, 1.0f})) {
         currentState = GameState::PLAYING;
         window.SetCursorLocked(true);
       }
 
       if (uiSystem.DrawButton(centerX, centerY + 80, btnW, btnH, whiteTex,
                               {0.2f, 0.5f, 0.8f, 1.0f},
-                              {0.4f, 0.7f, 0.9f, 1.0f})) {
+                              {0.4f, 0.7f, 0.9f, 1.0f},
+                              {0.15f, 0.35f, 0.6f, 1.0f})) {
         currentState = GameState::EDITOR;
         window.SetCursorLocked(false); // Editor needs cursor
       }
 
       if (uiSystem.DrawButton(centerX, centerY + 160, btnW, btnH, whiteTex,
                               {0.7f, 0.2f, 0.2f, 1.0f},
-                              {0.9f, 0.3f, 0.3f, 1.0f})) {
+                              {0.9f, 0.3f, 0.3f, 1.0f},
+                              {0.5f, 0.15f, 0.15f, 1.0f})) {
         break;
       }
 

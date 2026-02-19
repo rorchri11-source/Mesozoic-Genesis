@@ -63,7 +63,7 @@ void UISystem::DrawImage(float x, float y, float w, float h,
 
 bool UISystem::DrawButton(float x, float y, float w, float h,
                           GPUTexture &texture, glm::vec4 color,
-                          glm::vec4 hoverColor) {
+                          glm::vec4 hoverColor, glm::vec4 pressedColor) {
   if (!texture.IsValid())
     return false;
 
@@ -74,7 +74,21 @@ bool UISystem::DrawButton(float x, float y, float w, float h,
   bool hover = (mx >= x && mx <= x + w && my >= y && my <= y + h);
   bool down = window->IsMouseButtonDown(Window::MOUSE_LEFT);
 
-  DrawImage(x, y, w, h, texture, hover ? hoverColor : color);
+  glm::vec4 renderColor = color;
+  if (hover) {
+    if (down) {
+      if (pressedColor.a > 0.0f) {
+        renderColor = pressedColor;
+      } else {
+        renderColor = color * 0.8f; // Default derivation
+        renderColor.a = color.a;
+      }
+    } else {
+      renderColor = hoverColor;
+    }
+  }
+
+  DrawImage(x, y, w, h, texture, renderColor);
 
   return hover && down;
 }
@@ -107,7 +121,9 @@ bool UISystem::DrawSlider(float x, float y, float w, float h, float &value,
   // Knob
   float knobW = 10.0f;
   float kx = x + value * (w - knobW);
-  DrawImage(kx, y, knobW, h, texture, knobColor);
+  bool knobActive = (hover && down);
+  DrawImage(kx, y, knobW, h, texture,
+            knobActive ? knobColor * 0.8f : knobColor);
 
   return changed;
 }
