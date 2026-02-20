@@ -24,6 +24,7 @@
 #include "../Physics/IK/CCDSolver.h"
 #include <atomic>
 #include <cassert>
+#include <chrono>
 #include <cmath>
 #include <cstdint>
 #include <iostream>
@@ -854,6 +855,37 @@ void TestGraphicsBackend() {
 }
 
 // =========================================================================
+// Test: EntityManager Performance
+// =========================================================================
+void TestEntityManagerPerf() {
+  std::cout << "[Test] EntityManager Performance..." << std::endl;
+  EntityManager mgr;
+  std::vector<ComponentInfo> comps = {
+      {1, sizeof(float) * 3, 4}
+  };
+  uint32_t archId = mgr.RegisterArchetype(comps);
+
+  const int NUM_ENTITIES = 10000;
+  std::vector<EntityID> entities;
+  entities.reserve(NUM_ENTITIES);
+
+  for (int i = 0; i < NUM_ENTITIES; ++i) {
+    entities.push_back(mgr.CreateEntity(archId));
+  }
+
+  auto start = std::chrono::high_resolution_clock::now();
+
+  for (EntityID id : entities) {
+    mgr.DestroyEntity(id);
+  }
+
+  auto end = std::chrono::high_resolution_clock::now();
+  std::chrono::duration<double, std::milli> elapsed = end - start;
+
+  std::cout << "  Destroyed " << NUM_ENTITIES << " entities in " << elapsed.count() << " ms" << std::endl;
+}
+
+// =========================================================================
 // Main
 // =========================================================================
 int main() {
@@ -890,8 +922,10 @@ int main() {
   // Phase 8 (Backend)
   TestGraphicsBackend();
 
+  TestEntityManagerPerf();
+
   std::cout << "\n========================================" << std::endl;
-  std::cout << " All 17 Tests Passed!" << std::endl;
+  std::cout << " All Tests Passed!" << std::endl;
   std::cout << "========================================\n" << std::endl;
   return 0;
 }

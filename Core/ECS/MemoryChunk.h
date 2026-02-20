@@ -25,10 +25,13 @@ namespace ECS {
         // based on the Archetype's component strides.
         uint8_t data[CHUNK_SIZE - sizeof(ChunkHeader)];
 
+        std::vector<uint32_t> entityIds;
+
         MemoryChunk(uint32_t archId, uint16_t cap) {
             header.archetypeId = archId;
             header.count = 0;
             header.capacity = cap;
+            entityIds.reserve(cap);
         }
     };
 
