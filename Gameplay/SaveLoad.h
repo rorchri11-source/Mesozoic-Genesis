@@ -2,6 +2,7 @@
 #include "../Genetics/DNA.h"
 #include <cstdint>
 #include <cstring>
+#include <filesystem>
 #include <fstream>
 #include <iostream>
 #include <string>
@@ -247,7 +248,16 @@ public:
   }
 
   static std::string GetManualSavePath(const std::string &name) {
-    return "saves/" + name + ".meso";
+    // 🛡️ Sentinel: Prevent Path Traversal
+    // Sanitize input by extracting only the filename component.
+    std::filesystem::path p(name);
+    std::string safeName = p.filename().string();
+
+    // Ensure we don't end up with empty or relative directory names
+    if (safeName.empty() || safeName == "." || safeName == "..") {
+      safeName = "unnamed_save";
+    }
+    return "saves/" + safeName + ".meso";
   }
 };
 
