@@ -44,7 +44,8 @@ public:
                  glm::vec4 color = {1, 1, 1, 1});
   bool DrawButton(float x, float y, float w, float h, GPUTexture &texture,
                   glm::vec4 color = {1, 1, 1, 1},
-                  glm::vec4 hoverColor = {0.8, 0.8, 0.8, 1});
+                  glm::vec4 hoverColor = {0.8, 0.8, 0.8, 1},
+                  glm::vec4 pressedColor = {0.0f, 0.0f, 0.0f, 0.0f});
 
   bool DrawSlider(float x, float y, float w, float h, float &value, GPUTexture &texture,
                   glm::vec4 color = {0.5, 0.5, 0.5, 1},

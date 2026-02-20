@@ -23,7 +23,7 @@ if(glfw3_FOUND)
 else()
     # Try FetchContent if git is available
     find_program(GIT_PROGRAM git)
-    if(GIT_PROGRAM)
+    if(GIT_PROGRAM AND Vulkan_FOUND)
         message(STATUS "Fetching GLFW via FetchContent...")
         include(FetchContent)
         FetchContent_Declare(
