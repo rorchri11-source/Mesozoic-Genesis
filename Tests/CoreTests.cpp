@@ -564,7 +564,7 @@ void TestAssetPipeline() {
   // Test morph target generation
   auto morphs = MorphTargetExtractor::GenerateDinosaurMorphs(dino);
   assert(morphs.targets.size() ==
-         6); // growth, muscle, fat, elongate, jaw, crest
+         9); // growth, muscle, fat, elongate, jaw, crest, snout, bulk, horn
   assert(morphs.targets[0].name == "growth");
   assert(morphs.targets[1].name == "muscle");
 

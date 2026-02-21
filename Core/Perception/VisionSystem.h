@@ -62,17 +62,31 @@ public:
         continue;
 
       Vec3 toEnt = ent.position - observerPos;
-      float dist = toEnt.Length();
+      float distSq = toEnt.LengthSq();
 
       float adjustedRange = effectiveRange + ent.radius;
-      if (dist > adjustedRange)
+      float adjustedRangeSq = adjustedRange * adjustedRange;
+
+      if (distSq > adjustedRangeSq)
         continue;
 
-      float stealthRange = adjustedRange * (1.0f - ent.stealthFactor * 0.8f);
-      if (dist > stealthRange && ent.stealthFactor > 0.5f)
+      float stealthFactor = 1.0f - ent.stealthFactor * 0.8f;
+      float stealthRange = adjustedRange * stealthFactor;
+      float stealthRangeSq = stealthRange * stealthRange;
+
+      if (distSq > stealthRangeSq && ent.stealthFactor > 0.5f)
         continue;
 
-      Vec3 dirNorm = toEnt.Normalized();
+      float dist = std::sqrt(distSq);
+
+      Vec3 dirNorm;
+      if (dist > 0.00001f) {
+        float invDist = 1.0f / dist;
+        dirNorm = toEnt * invDist;
+      } else {
+        dirNorm = Vec3(0, 0, 0);
+      }
+
       float dotProduct = fwdNorm.Dot(dirNorm);
 
       if (dotProduct >= cosHalfFov) {
