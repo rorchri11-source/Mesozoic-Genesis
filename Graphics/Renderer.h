@@ -191,7 +191,7 @@ public:
     size_t dataSize = vertices.size() * sizeof(Vertex);
     if (gpuMeshes[meshId].vertexBuffer.size < dataSize) {
       // If buffer is too small, destroy and recreate
-      backend.DestroyBuffer(gpuMeshes[meshId].vertexBuffer);
+      backend->DestroyBuffer(gpuMeshes[meshId].vertexBuffer);
       // Re-create vertex buffer
       // Note: Indices remain same, indexCount remains same
       // This is a simplified "Update" for vertex data only.
@@ -204,7 +204,7 @@ public:
       return;
     }
 
-    backend.UpdateBuffer(gpuMeshes[meshId].vertexBuffer, vertices.data(), dataSize);
+    backend->UpdateBuffer(gpuMeshes[meshId].vertexBuffer, vertices.data(), dataSize);
   }
 
   void RenderFrame(float deltaTime) {
