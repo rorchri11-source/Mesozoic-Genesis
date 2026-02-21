@@ -2,6 +2,7 @@
 #include "../Genetics/DNA.h"
 #include <cstdint>
 #include <cstring>
+#include <filesystem>
 #include <fstream>
 #include <iostream>
 #include <string>
@@ -247,7 +248,9 @@ public:
   }
 
   static std::string GetManualSavePath(const std::string &name) {
-    return "saves/" + name + ".meso";
+    // Sanitize input using filesystem to prevent path traversal
+    std::filesystem::path p(name);
+    return "saves/" + p.filename().string() + ".meso";
   }
 };
 
