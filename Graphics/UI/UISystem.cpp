@@ -63,7 +63,7 @@ void UISystem::DrawImage(float x, float y, float w, float h,
 
 bool UISystem::DrawButton(float x, float y, float w, float h,
                           GPUTexture &texture, glm::vec4 color,
-                          glm::vec4 hoverColor) {
+                          glm::vec4 hoverColor, glm::vec4 pressedColor) {
   if (!texture.IsValid())
     return false;
 
@@ -74,7 +74,24 @@ bool UISystem::DrawButton(float x, float y, float w, float h,
   bool hover = (mx >= x && mx <= x + w && my >= y && my <= y + h);
   bool down = window->IsMouseButtonDown(Window::MOUSE_LEFT);
 
-  DrawImage(x, y, w, h, texture, hover ? hoverColor : color);
+  glm::vec4 renderColor = color;
+  if (hover) {
+    if (down) {
+      if (pressedColor.r == 0.0f && pressedColor.g == 0.0f &&
+          pressedColor.b == 0.0f && pressedColor.a == 0.0f) {
+        renderColor = hoverColor;
+        renderColor.r *= 0.8f;
+        renderColor.g *= 0.8f;
+        renderColor.b *= 0.8f;
+      } else {
+        renderColor = pressedColor;
+      }
+    } else {
+      renderColor = hoverColor;
+    }
+  }
+
+  DrawImage(x, y, w, h, texture, renderColor);
 
   return hover && down;
 }
