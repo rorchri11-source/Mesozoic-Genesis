@@ -1,7 +1,10 @@
 #pragma once
 #include "../Genetics/DNA.h"
+#include <algorithm>
+#include <cctype>
 #include <cstdint>
 #include <cstring>
+#include <filesystem>
 #include <fstream>
 #include <iostream>
 #include <string>
@@ -247,7 +250,25 @@ public:
   }
 
   static std::string GetManualSavePath(const std::string &name) {
-    return "saves/" + name + ".meso";
+    // Sanitize input to prevent path traversal
+    std::string safeName = std::filesystem::path(name).filename().string();
+
+    // Replace potentially unsafe characters with underscore
+    // Allow only alphanumeric, underscore, and hyphen
+    std::replace_if(
+        safeName.begin(), safeName.end(),
+        [](char c) {
+          return !std::isalnum(static_cast<unsigned char>(c)) && c != '_' &&
+                 c != '-';
+        },
+        '_');
+
+    // Handle empty or reserved names
+    if (safeName.empty() || safeName == "." || safeName == "..") {
+      safeName = "unnamed_save";
+    }
+
+    return "saves/" + safeName + ".meso";
   }
 };
 
